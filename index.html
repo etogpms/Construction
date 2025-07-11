@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Construction Project Monitoring Dashboard</title>
+  <!-- Bootstrap 5 -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <!-- Font Awesome -->
+  <link
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+    rel="stylesheet"
+  />
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Logos Header -->
+  <header class="container-fluid py-3 d-flex align-items-center justify-content-center gap-4 flex-wrap" id="logosHeader">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/b/b3/Metropolitan_Waterworks_and_Sewerage_System_%28MWSS_%2C_NAWASA%29.svg" alt="MWSS Logo" class="logo-img" />
+    <div class="text-center px-3">
+      <h6 class="mb-0 fw-bold agency-title">Metropolitan Waterworks and Sewerage System</h6>
+      <h6 class="mb-0 agency-sub">Engineering and Technical Operations Group</h6>
+    </div>
+    <img src="https://upload.wikimedia.org/wikipedia/commons/b/b1/Bagong_Pilipinas_logo.png" alt="Bagong Pilipinas Logo" class="logo-img" />
+  </header>
+
+  <!-- Login screen  -->
+  <div id="loginScreen" class="d-flex flex-column align-items-center justify-content-center vh-100" style="display:none;">
+    <h2 class="login-page-title text-center">Construction Project Monitoring</h2>
+    <div class="card p-4 shadow" style="min-width:320px; max-width:400px;">
+      <h4 class="mb-3 text-center" id="loginTitle">Login</h4>
+            <!-- Login Form -->
+            <form id="loginForm">
+              <div class="mb-3">
+                <label for="loginEmail" class="form-label">Email</label>
+                <input type="email" class="form-control" id="loginEmail" required />
+              </div>
+              <div class="mb-3">
+                <label for="loginPassword" class="form-label">Password</label>
+                <input type="password" class="form-control" id="loginPassword" required />
+              </div>
+              <button type="submit" class="btn btn-primary w-100">Login</button>
+            </form>
+            <!-- Signup Form -->
+            <form id="signupForm" class="d-none">
+              <div class="mb-3">
+                <label for="signupEmail" class="form-label">Email</label>
+                <input type="email" class="form-control" id="signupEmail" required />
+              </div>
+              <div class="mb-3">
+                <label for="signupPassword" class="form-label">Password</label>
+                <input type="password" class="form-control" id="signupPassword" required />
+              </div>
+              <div class="mb-3">
+                <label for="signupPassword2" class="form-label">Confirm Password</label>
+                <input type="password" class="form-control" id="signupPassword2" required />
+              </div>
+              <button type="submit" class="btn btn-success w-100">Sign Up</button>
+            </form>
+            <!-- Toggle Links -->
+            <p class="text-center mt-3" id="loginLinks">
+              <a href="#" id="showSignupLink">Create account</a> |
+              <a href="#" id="forgotPwLink">Forgot password?</a> |
+              <a href="#" id="viewOnlyLink">Continue as viewer</a>
+            </p>
+            <p class="text-center mt-3 d-none" id="signupLinks">
+              <a href="#" id="showLoginLink">Already have an account? Log in</a>
+            </p>
+    </div>
+  </div>
+
+  <!-- Main App Wrapper -->
+  <div id="appWrapper" style="display:none;">
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+    <div class="container-fluid">
+      <a class="navbar-brand fw-bold" href="#">Construction Project Monitoring</a>
+      <div class="ms-auto d-flex align-items-center gap-2">
+        <button class="btn btn-outline-info" id="manageUsersBtn" style="display:none;">Manage Users</button>
+        <button class="btn btn-outline-light" id="logoutBtn" style="display:none;">Logout</button>
+        <button class="btn btn-outline-light" id="loginBtn" style="display:none;">Login</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Users Modal -->
+  <div class="modal fade" id="usersModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Pending Account Approvals</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="table-responsive">
+            <table class="table table-sm" id="pendingUsersTable">
+              <thead><tr><th>Email</th><th>Date Created</th><th>Action</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="container-fluid px-4">
+    <!-- Action Bar -->
+    <div class="row g-2 mb-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label" for="searchInput">Search Project</label>
+        <input
+          type="text"
+          id="searchInput"
+          class="form-control"
+          placeholder="Project name or contractor..."
+        />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="contractorFilter">Filter by Implementing Agency</label>
+        <select id="agencyFilter" class="form-select">
+          <option value="">All Agencies</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="statusFilter">Filter by Status</label>
+        <select id="statusFilter" class="form-select">
+          <option value="">All Statuses</option>
+          <option value="On-going">On-going</option>
+          <option value="Delayed">Delayed</option>
+          <option value="Completed">Completed</option>
+        </select>
+      </div>
+      <div class="col-md-3 text-md-end d-grid gap-2">
+        <button class="btn btn-success" id="exportBtn">
+          <i class="fa-solid fa-file-export me-1"></i>Export
+        </button>
+        <button class="btn btn-primary" id="addProjectBtn" data-bs-toggle="modal" data-bs-target="#projectModal">
+          <i class="fa-solid fa-plus me-1"></i>Add Project
+        </button>
+      </div>
+    </div>
+
+    <!-- Projects List -->
+    <div class="table-responsive">
+      <table class="table table-hover align-middle" id="projectsTable">
+        <thead class="table-primary">
+          <tr>
+            <th scope="col">Project Name</th>
+            <th scope="col">Implementing Agency</th>
+            <th scope="col">Contractor</th>
+            <th scope="col">Status</th>
+            <th scope="col">Target Completion</th>
+            <th scope="col">% Accomp.</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="projectsTbody"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- Project Details Modal -->
+  <div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header bg-secondary text-white">
+          <h5 class="modal-title" id="detailsModalLabel">Project Details</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="detailsBody">
+          <!-- dynamic -->
+        </div>
+        <div class="modal-footer" id="detailsFooter"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Project Details Offcanvas -->
+  <div class="offcanvas offcanvas-end" tabindex="-1" id="projectOffcanvas" aria-labelledby="projectOffcanvasLabel">
+    <div class="offcanvas-header">
+      <h5 id="projectOffcanvasLabel">Project Details</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body" id="offcanvasBody">
+      <!-- dynamic -->
+    </div>
+  </div>
+
+  <!-- Project Modal -->
+  <div class="modal fade" id="projectModal" tabindex="-1" aria-labelledby="projectModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header bg-primary text-white">
+          <h5 class="modal-title" id="projectModalLabel">Add / Edit Project</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form id="projectForm">
+          <div class="modal-body">
+            <input type="hidden" id="projectId" name="projectId" />
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label" for="projectName">Project Name *</label>
+                <input type="text" class="form-control" id="projectName" name="projectName" required />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="implementingAgency">Implementing Agency *</label>
+                <input type="text" class="form-control" id="implementingAgency" name="implementingAgency" required />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="projectLocation">Project Location *</label>
+                <input type="text" class="form-control" id="projectLocation" name="projectLocation" required />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="contractor">Contractor *</label>
+                <input type="text" class="form-control" id="contractor" name="contractor" required />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="contractAmount">Contract Amount (PHP) *</label>
+                <input type="number" step="0.01" class="form-control" id="contractAmount" name="contractAmount" required />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="revisedContractAmount">Revised Contract Amount (PHP)</label>
+                <input type="number" step="0.01" class="form-control" id="revisedContractAmount" name="revisedContractAmount" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="ntpDate">Notice to Proceed *</label>
+                <input type="date" class="form-control" id="ntpDate" name="ntpDate" required />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="originalDuration">Original Contract Duration (days) *</label>
+                <input type="number" class="form-control" id="originalDuration" name="originalDuration" required />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="timeExtension">Time Extension (days)</label>
+                <input type="number" class="form-control" id="timeExtension" name="timeExtension" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="originalCompletion">Original Target Completion *</label>
+                <input type="date" class="form-control" id="originalCompletion" name="originalCompletion" required />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="revisedCompletion">Revised Target Completion</label>
+                <input type="date" class="form-control" id="revisedCompletion" name="revisedCompletion" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="percentAccomplishment">% Accomplishment To Date *</label>
+                <input type="number" class="form-control" id="percentAccomplishment" name="percentAccomplishment" min="0" max="100" step="0.01" value="0" required />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="percentPrevious">% Accomplishment Previous *</label>
+                <input type="number" class="form-control" id="percentPrevious" name="percentPrevious" min="0" max="100" step="0.01" value="0" required />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="percentPlanned">% Accomplishment Planned *</label>
+                <input type="number" class="form-control" id="percentPlanned" name="percentPlanned" min="0" max="100" step="0.01" value="0" required />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="accompDate">As of Date *</label>
+                <input type="date" class="form-control" id="accompDate" name="accompDate" required />
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="activities">Ongoing Activities</label>
+                <textarea class="form-control" id="activities" name="activities" rows="2"></textarea>
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="issues">Issues & Concerns</label>
+                <textarea class="form-control" id="issues" name="issues" rows="2"></textarea>
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="actionTaken">Action Taken</label>
+                <textarea class="form-control" id="actionTaken" name="actionTaken" rows="2"></textarea>
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="remarks">Remarks</label>
+                <textarea class="form-control" id="remarks" name="remarks" rows="2"></textarea>
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="otherDetails">Other Project Details</label>
+                <textarea class="form-control" id="otherDetails" name="otherDetails" rows="2"></textarea>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Project Photo 1 (optional)</label>
+                <input type="file" class="form-control mb-2" id="projectPhoto1" accept="image/*" />
+                <label class="form-label">Project Photo 2 (optional)</label>
+                <input type="file" class="form-control mb-2" id="projectPhoto2" accept="image/*" />
+                <label class="form-label">Project Photo 3 (optional)</label>
+                <input type="file" class="form-control" id="projectPhoto3" accept="image/*" />
+              </div>
+            </div>
+            <!-- Modal Scroll Buttons -->
+            <button type="button" class="btn btn-primary rounded-circle modal-scroll-btn" id="modalScrollUp" title="Scroll Up">
+              <i class="fa-solid fa-arrow-up"></i>
+            </button>
+            <button type="button" class="btn btn-primary rounded-circle modal-scroll-btn" id="modalScrollDown" title="Scroll Down">
+              <i class="fa-solid fa-arrow-down"></i>
+            </button>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" id="saveBtn" class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- jsPDF for PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- SheetJS for Excel export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.20.2/xlsx.full.min.js"></script>
+  <!-- Scroll Buttons -->
+  <button id="scrollTopBtn" class="btn btn-primary rounded-circle shadow scroll-btn" title="Scroll to Top">
+    <i class="fa-solid fa-arrow-up"></i>
+  </button>
+  <button id="scrollBottomBtn" class="btn btn-primary rounded-circle shadow scroll-btn" title="Scroll to Bottom">
+    <i class="fa-solid fa-arrow-down"></i>
+  </button>
+
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html-docx-js/0.4.1/html-docx.min.js"></script>
+  
+  <!-- Custom Script -->
+  <style>
+  @media print{
+    body *{visibility:hidden!important;}
+    #detailsModal .modal-content, #detailsModal .modal-content *{visibility:visible!important;}
+    #detailsModal{position: absolute; top:0; left:0; width:100%;}
+  }
+</style>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyD0VGkytRW3YMqUIgbTrFNtBSDFAtlY-PU",
+    authDomain: "mwss-project-monitoring-system.firebaseapp.com",
+    projectId: "mwss-project-monitoring-system",
+    storageBucket: "mwss-project-monitoring-system.app", // typo from console? check if appspot.com
+    messagingSenderId: "973804039753",
+    appId: "1:973804039753:web:bf26fd271952a7e8669998",
+    measurementId: "G-4C070YCMMT"
+  };
+  firebase.initializeApp(firebaseConfig);
+</script>
+
+<!-- Existing libs -->
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html-docx-js/0.4.1/html-docx.min.js"></script>
+  
+  <!-- Custom Script -->
+  <script src="script.js"></script>
+</div> <!-- end appWrapper -->
+</body>
+</html>
