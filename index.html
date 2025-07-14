@@ -80,7 +80,9 @@
     <div class="container-fluid">
       <a class="navbar-brand fw-bold" href="#">Construction Project Monitoring</a>
       <div class="ms-auto d-flex align-items-center gap-2">
-        <button class="btn btn-outline-info" id="manageUsersBtn" style="display:none;">Manage Users</button>
+        <button class="btn btn-outline-info position-relative" id="manageUsersBtn" style="display:none;">
+          Manage Users <span id="pendingBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="display:none;">0</span>
+        </button>
         <button class="btn btn-outline-light" id="logoutBtn" style="display:none;">Logout</button>
         <button class="btn btn-outline-light" id="loginBtn" style="display:none;">Login</button>
       </div>
