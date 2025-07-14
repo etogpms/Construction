@@ -34,6 +34,8 @@
   // convenient references
   const {loginForm, signupForm, showSignupLink, showLoginLink, loginLinks, signupLinks} = elements;
   const appWrapper = document.getElementById('appWrapper');
+  const billingContainer = document.getElementById('billingContainer');
+  const addBillingBtn    = document.getElementById('addBillingBtn');
   const viewOnlyLink = document.getElementById('viewOnlyLink');
   const logoutBtn  = document.getElementById('logoutBtn');
   const loginBtn   = document.getElementById('loginBtn');
@@ -108,6 +110,36 @@ async function rejectUser(u){
 
 
 
+  // ---- Billing Details handlers ----
+  function createBillingRow(data={}){
+    const div=document.createElement('div');
+    div.className='row g-2 align-items-end mb-2 billing-row';
+    div.innerHTML=`<div class="col-4"><input type="date" class="form-control billing-date" value="${data.date||''}" placeholder="Date"/></div>
+                  <div class="col-4"><input type="number" class="form-control billing-amount" value="${data.amount||''}" placeholder="Amount (PHP)" step="0.01" min="0"/></div>
+                  <div class="col-3"><input type="text" class="form-control billing-desc" value="${data.desc||''}" placeholder="Description"/></div>
+                  <div class="col-1 text-end"><button type="button" class="btn btn-outline-danger btn-sm remove-billing"><i class="fa fa-minus"></i></button></div>`;
+    div.querySelector('.remove-billing').onclick=()=>{
+      div.remove();
+    };
+    billingContainer.appendChild(div);
+  }
+  if(addBillingBtn){
+    addBillingBtn.addEventListener('click',()=>createBillingRow());
+  }
+
+  function gatherBilling(){
+    const rows = Array.from(billingContainer.querySelectorAll('.billing-row'));
+    return rows.map(r=>({
+      date:  r.querySelector('.billing-date').value,
+      amount: parseFloat(r.querySelector('.billing-amount').value)||0,
+      desc: r.querySelector('.billing-desc').value.trim()
+    })).filter(b=>b.date && b.amount);
+  }
+  function populateBilling(arr){
+    billingContainer.innerHTML='';
+    (arr||[]).forEach(d=>createBillingRow(d));
+  }
+
   // ---- Project CRUD & Rendering ----
 
   async function saveProject(project) {
@@ -117,6 +149,7 @@ async function rejectUser(u){
   function onSaveProject(e) {
     e.preventDefault();
     const formData = new FormData(elements.projectForm);
+  const progressBilling = gatherBilling();
     const id = formData.get("projectId") || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).substr(2, 5));
     if(!formData.get("projectName").trim()){alert('Project Name is required');return;}
     if(!formData.get("contractor").trim()){alert('Contractor is required');return;}
@@ -144,7 +177,8 @@ async function rejectUser(u){
       activities:formData.get("activities"),
       issues:formData.get("issues"),
       remarks:formData.get("remarks"),
-      otherDetails:formData.get("otherDetails"),
+      otherDetails: formData.get("otherDetails"),
+      progressBilling,
       history:[...(existing.history||[])],
       photos: existing.photos || (existing.sCurveDataUrl ? [existing.sCurveDataUrl] : []),
       accomplishments:[...(existing.accomplishments||[])]
@@ -153,7 +187,8 @@ async function rejectUser(u){
     if(!project.history) project.history=[];
     project.history.push({email:userEmail,timestamp:new Date().toISOString(),action:formData.get("projectId")?'edit':'create'});
     if(newAcc.date){project.accomplishments.push({...newAcc});}
-    function postSaveUI(){elements.searchInput.value='';elements.agencyFilter.value='';elements.statusFilter.value='';elements.projectModal.hide();clearForm();}
+    function postSaveUI(){elements.searchInput.value='';elements.agencyFilter.value='';elements.statusFilter.value='';elements.projectModal.hide();clearForm();
+  billingContainer.innerHTML='';}
     const photoInputs=["projectPhoto1","projectPhoto2","projectPhoto3"].map(id=>document.getElementById(id));
     const files=photoInputs.map(inp=>inp?.files[0]).filter(f=>!!f);
     if(files.length){Promise.all(files.map(f=>new Promise((res,rej)=>{const reader=new FileReader();reader.onload=()=>res(reader.result);reader.onerror=rej;reader.readAsDataURL(f);}))).then(async dataUrls=>{project.photos=dataUrls;saveProject(project).catch(err=>alert(err.message));postSaveUI();}).catch(err=>alert(err.message));}else{saveProject(project).then(postSaveUI).catch(err=>alert(err.message));}
@@ -161,9 +196,11 @@ async function rejectUser(u){
 
   window.deleteProject = async function(id){ if(!isAdmin){alert('Only admin can delete projects');return;} try{await db.collection(PROJECTS_COL).doc(id).delete();projects=projects.filter(p=>p.id!==id);render();}catch(err){alert(err.message);} };
 
-  function clearForm(){elements.projectForm.reset();document.getElementById("projectId").value="";["projectPhoto1","projectPhoto2","projectPhoto3"].forEach(id=>{const el=document.getElementById(id);if(el) el.value="";});document.getElementById("actionTaken").value="";document.getElementById("percentAccomplishment").value=0;document.getElementById("percentPrevious").value=0;document.getElementById("percentPlanned").value=0;document.getElementById("accompDate").value="";}
+  function clearForm(){
+  billingContainer.innerHTML='';elements.projectForm.reset();document.getElementById("projectId").value="";["projectPhoto1","projectPhoto2","projectPhoto3"].forEach(id=>{const el=document.getElementById(id);if(el) el.value="";});document.getElementById("actionTaken").value="";document.getElementById("percentAccomplishment").value=0;document.getElementById("percentPrevious").value=0;document.getElementById("percentPlanned").value=0;document.getElementById("accompDate").value="";}
 
-  function populateForm(project){document.getElementById("projectId").value=project.id;document.getElementById("projectName").value=project.name;document.getElementById("implementingAgency").value=project.implementingAgency;
+  function populateForm(project){
+  populateBilling(project.progressBilling);document.getElementById("projectId").value=project.id;document.getElementById("projectName").value=project.name;document.getElementById("implementingAgency").value=project.implementingAgency;
 document.getElementById("projectLocation").value=project.location || '';document.getElementById("contractor").value=project.contractor;document.getElementById("contractAmount").value=project.contractAmount;document.getElementById("revisedContractAmount").value=project.revisedContractAmount??'';document.getElementById("ntpDate").value=project.ntpDate;document.getElementById("originalDuration").value=project.originalDuration;document.getElementById("timeExtension").value=project.timeExtension;document.getElementById("originalCompletion").value=project.originalCompletion;document.getElementById("revisedCompletion").value=project.revisedCompletion;document.getElementById("activities").value=project.activities;document.getElementById("issues").value=project.issues;document.getElementById("actionTaken").value="";document.getElementById("remarks").value=project.remarks;document.getElementById("otherDetails").value=project.otherDetails;const last=(project.accomplishments||[]).slice(-1)[0]||{percent:0,prevPercent:0,date:""};document.getElementById("percentPrevious").value=last.prevPercent??last.percent??0;document.getElementById("percentPlanned").value=last.plannedPercent??0;document.getElementById("percentAccomplishment").value=last.percent??0;document.getElementById("accompDate").value=last.date;document.getElementById("actionTaken").value=last.action||"";}
 
   function getProjectStatus(p){
@@ -223,8 +260,9 @@ document.getElementById("projectLocation").value=project.location || '';document
 
   window.editProject=(id)=>{const p=projects.find(x=>x.id===id);if(!p) return;populateForm(p);elements.projectModal.show();};
 
-  window.viewProject=(id)=>{const p=projects.find(proj=>proj.id===id);if(!p) return;const photos=(p.photos&&p.photos.length)?p.photos:(p.sCurveDataUrl?[p.sCurveDataUrl]:[]);const photosHtml=photos.length?`<div class="d-flex gap-3 mb-3 flex-wrap">${photos.slice(0,3).map(url=>`<img src="${url}" class="img-fluid" style="max-height:300px;object-fit:contain;">`).join('')}</div>`:'';const body=document.getElementById('detailsBody');body.innerHTML=`<h5 class="fw-bold mb-2">${p.name}</h5><p><strong>Implementing Agency:</strong> ${p.implementingAgency}</p><p><strong>Contractor:</strong> ${p.contractor}</p>
-<p><strong>Location:</strong> ${p.location || ''}</p><p><strong>Contract Amount:</strong> ₱${Number(p.contractAmount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>${p.revisedContractAmount?`<p><strong>Revised Contract Amount:</strong> ₱${Number(p.revisedContractAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>`:''}<p><strong>Status:</strong> ${getProjectStatus(p)}</p><p><strong>NTP:</strong> ${p.ntpDate}</p><p><strong>Duration:</strong> ${p.originalDuration} days ${p.timeExtension?"+"+p.timeExtension:""}</p><p><strong>Target Completion:</strong> ${p.revisedCompletion||p.originalCompletion}</p>${p.remarks?`<p><strong>Remarks:</strong> ${p.remarks}</p>`:''}${p.otherDetails?`<p><strong>Details:</strong> ${p.otherDetails}</p>`:''}<h6 class="mt-3">Accomplishment History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>% Accomplishment<br>Planned</th><th>% Accomplishment<br>Previous</th><th>% Accomplishment<br>To Date</th><th>Variance %</th><th>Activities</th><th>Issue</th><th>Action Taken</th></tr></thead><tbody>${(p.accomplishments||[]).map(a=>`<tr><td>${a.date}</td><td>${(a.plannedPercent??0).toFixed(2)}%</td><td>${(a.prevPercent??0).toFixed(2)}%</td><td>${(a.percent??0).toFixed(2)}%</td><td>${a.variance>=0?'+':''}${(a.variance??0).toFixed(2)}%</td><td>${a.activities||''}</td><td>${a.issue||p.issues||''}</td><td>${a.action||''}</td></tr>`).join('')}</tbody></table></div>${(p.history||[]).length?`<h6 class="mt-3">Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${p.history.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`:''}`;body.innerHTML+=photosHtml;const footer=document.getElementById('detailsFooter');footer.innerHTML=`<button class="btn btn-outline-secondary" id="printBtn"><i class="fa fa-print me-1"></i>Print</button><button class="btn btn-outline-success" id="docxBtn"><i class="fa fa-download me-1"></i>Word</button>`;document.getElementById('printBtn').onclick=()=>window.print();document.getElementById('docxBtn').onclick=()=>exportProjectDocx(p);bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal')).show();};
+  window.viewProject=(id)=>{const p=projects.find(proj=>proj.id===id);if(!p) return;const photos=(p.photos&&p.photos.length)?p.photos:(p.sCurveDataUrl?[p.sCurveDataUrl]:[]);
+  const billingHtml = (p.progressBilling&&p.progressBilling.length)?`<h6 class="mt-3">Billing Details</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>Amount (PHP)</th><th>Description</th></tr></thead><tbody>${p.progressBilling.map(b=>`<tr><td>${b.date}</td><td>₱${Number(b.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td>${b.desc||''}</td></tr>`).join('')}</tbody></table></div>`:'';const photosHtml=photos.length?`<div class="d-flex gap-3 mb-3 flex-wrap">${photos.slice(0,3).map(url=>`<img src="${url}" class="img-fluid" style="max-height:300px;object-fit:contain;">`).join('')}</div>`:'';const body=document.getElementById('detailsBody');body.innerHTML=`<h5 class="fw-bold mb-2">${p.name}</h5><p><strong>Implementing Agency:</strong> ${p.implementingAgency}</p><p><strong>Contractor:</strong> ${p.contractor}</p>
+<p><strong>Location:</strong> ${p.location || ''}</p><p><strong>Contract Amount:</strong> ₱${Number(p.contractAmount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>${p.revisedContractAmount?`<p><strong>Revised Contract Amount:</strong> ₱${Number(p.revisedContractAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>`:''}<p><strong>Status:</strong> ${getProjectStatus(p)}</p><p><strong>NTP:</strong> ${p.ntpDate}</p><p><strong>Duration:</strong> ${p.originalDuration} days ${p.timeExtension?"+"+p.timeExtension:""}</p><p><strong>Target Completion:</strong> ${p.revisedCompletion||p.originalCompletion}</p>${p.remarks?`<p><strong>Remarks:</strong> ${p.remarks}</p>`:''}${p.otherDetails?`<p><strong>Details:</strong> ${p.otherDetails}</p>`:''}<h6 class="mt-3">Accomplishment History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>% Accomplishment<br>Planned</th><th>% Accomplishment<br>Previous</th><th>% Accomplishment<br>To Date</th><th>Variance %</th><th>Activities</th><th>Issue</th><th>Action Taken</th></tr></thead><tbody>${(p.accomplishments||[]).map(a=>`<tr><td>${a.date}</td><td>${(a.plannedPercent??0).toFixed(2)}%</td><td>${(a.prevPercent??0).toFixed(2)}%</td><td>${(a.percent??0).toFixed(2)}%</td><td>${a.variance>=0?'+':''}${(a.variance??0).toFixed(2)}%</td><td>${a.activities||''}</td><td>${a.issue||p.issues||''}</td><td>${a.action||''}</td></tr>`).join('')}</tbody></table></div>${billingHtml}${(p.history||[]).length?`<h6 class="mt-3">Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${p.history.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`:''}`;body.innerHTML+=photosHtml;const footer=document.getElementById('detailsFooter');footer.innerHTML=`<button class="btn btn-outline-secondary" id="printBtn"><i class="fa fa-print me-1"></i>Print</button><button class="btn btn-outline-success" id="docxBtn"><i class="fa fa-download me-1"></i>Word</button>`;document.getElementById('printBtn').onclick=()=>window.print();document.getElementById('docxBtn').onclick=()=>exportProjectDocx(p);bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal')).show();};
 
   // simple docx export skipped for brevity ...
 
