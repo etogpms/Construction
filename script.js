@@ -44,6 +44,13 @@
   let projects = [];
   let isViewOnly = false;
   let pendingUsers = [];
+  function updatePendingBadge(){
+    const badge = document.getElementById('pendingBadge');
+    if(!badge) return;
+    const cnt = pendingUsers.length;
+    if(cnt>0){badge.textContent=cnt;badge.style.display='inline-block';}
+    else {badge.style.display='none';}
+  }
   
 
   // Load config for signups
@@ -61,8 +68,11 @@
   function updateAdminUI(){
     if(isAdmin){
       elements.manageUsersBtn.style.display = 'inline-block';
+      loadPendingUsers();
     } else {
       elements.manageUsersBtn.style.display = 'none';
+      pendingUsers = [];
+      updatePendingBadge();
     }
   }
 
@@ -71,6 +81,7 @@
     const snap = await db.collection('users').where('approved','==',false).get();
     pendingUsers = snap.docs.map(d=>({id:d.id,...d.data()}));
     renderPendingUsersTable();
+    updatePendingBadge();
   }catch(err){console.error('Failed to load pending users',err);}
 }
 
