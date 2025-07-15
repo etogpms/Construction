@@ -7,8 +7,12 @@
 (() => {
   const LS_KEY = "construction_projects"; // deprecated, kept for backward compatibility
   const db = firebase.firestore();
+  // Enable verbose Firestore console logging for debugging
+  firebase.firestore.setLogLevel('debug');
   const PROJECTS_COL = 'projects';
+  const DEEPWELLS_COL = 'deepwells';
   let unsubscribeProjects = null;
+  let unsubscribeDeepwells = null;
 
   const ADMIN_EMAIL = "johnlowel.fradejas@mwss.gov.ph"; // change to your address
   let isAdmin = false;
@@ -29,6 +33,21 @@
     signupLinks: document.getElementById('signupLinks'),
     manageUsersBtn: document.getElementById('manageUsersBtn'),
     pendingUsersTable: document.getElementById('pendingUsersTable'),
+    // Deepwell specific
+    deepwellsTbody: document.getElementById('deepwellsTbody'),
+    dwProviderFilter: document.getElementById('dwProviderFilter'),
+    dwStatusFilter: document.getElementById('dwStatusFilter'),
+    dwSearchInput: document.getElementById('dwSearchInput'),
+    deepwellForm: document.getElementById('deepwellForm'),
+    deepwellModal: new bootstrap.Modal(document.getElementById('deepwellModal')),
+    projectsTab: document.getElementById('projectsTab'),
+    deepwellsTab: document.getElementById('deepwellsTab'),
+    projectsSection: document.getElementById('projectsSection'),
+    deepwellsSection: document.getElementById('deepwellsSection'),
+    addDeepwellBtn: document.getElementById('addDeepwellBtn'),
+    deepwellsTbody: document.getElementById('deepwellsTbody'),
+    dwMonthsBody: document.getElementById('dwMonthsBody'),
+    addDwMonthBtn: document.getElementById('addDwMonthBtn'),
   };
 
   // convenient references
@@ -42,6 +61,7 @@
   const loginScreen = document.getElementById('loginScreen');
 
   let projects = [];
+  let deepwells = [];
   let isViewOnly = false;
   let pendingUsers = [];
   function updatePendingBadge(){
@@ -63,6 +83,7 @@
       }
     }catch(err){console.warn('Failed to load config',err);} 
     updateAdminUI();
+      subscribeDeepwells();
   }
 
   function updateAdminUI(){
@@ -322,8 +343,274 @@ document.getElementById("projectLocation").value=project.location || '';document
   if(elements.searchInput) elements.searchInput.addEventListener('input', render);
   if(elements.agencyFilter) elements.agencyFilter.addEventListener('change', render);
   if(elements.statusFilter) elements.statusFilter.addEventListener('change', render);
+// Deepwell filters
+elements.dwProviderFilter?.addEventListener('change', renderDeepwells);
+elements.dwStatusFilter?.addEventListener('change', renderDeepwells);
+elements.dwSearchInput?.addEventListener('input', renderDeepwells);
 
-  // ---- End project functions ----
+  // ---- Utility ----
+function fmtNum(val){
+  const num = Number(val);
+  return isNaN(num)? (val||'') : num.toLocaleString();
+}
+
+// ---- Deepwell CRUD & Rendering ----
+function deepwellRowHtml(dw){
+  let actionsHtml = firebase.auth().currentUser ? `<button class="btn btn-sm btn-primary me-1" title="Edit" onclick="editDeepwell('${dw.id}')"><i class="fa fa-pencil"></i></button>` : '';
+  if(isAdmin){
+    actionsHtml += `<button class="btn btn-sm btn-danger" title="Delete" onclick="deleteDeepwell('${dw.id}')"><i class="fa fa-trash"></i></button>`;
+  }
+  return `<tr data-id="${dw.id}">`
+      + `<td>${dw.name}</td>`
+      + `<td>${dw.provider}</td>`
+      + `<td>${dw.permit||''}</td>`
+      + `<td>${dw.status||''}</td>`
+      + `<td>${fmtNum(dw.ratedYield)}</td>`
+      + `<td>${fmtNum(dw.avgProd)}</td>`
+      + `<td>${fmtNum(dw.totalProd)}</td>`
+      + `<td class="d-flex gap-1">${actionsHtml}</td>`
+      + `</tr>`;
+}
+
+function renderDeepwells(){
+  let list = deepwells;
+  const provider = elements.dwProviderFilter?.value;
+  const status   = elements.dwStatusFilter?.value;
+  const query    = (elements.dwSearchInput?.value || '').trim().toLowerCase();
+  if(provider) list = list.filter(dw=>dw.provider===provider);
+  if(status)   list = list.filter(dw=>dw.status===status);
+  if(query)    list = list.filter(dw => {
+    const name = (dw.name||'').toLowerCase();
+    const prov = (dw.provider||'').toLowerCase();
+    const permit = (dw.permit||'').toLowerCase();
+    return name.includes(query) || prov.includes(query) || permit.includes(query);
+  });
+  const tbody = elements.deepwellsTbody;
+  tbody.innerHTML = list.map(deepwellRowHtml).join('');
+  attachDeepwellRowEvents();
+}
+
+function attachDeepwellRowEvents(){
+  const tbody = elements.deepwellsTbody;
+  Array.from(tbody.querySelectorAll('tr')).forEach(row=>{
+    row.addEventListener('click',e=>{
+      if(isViewOnly) return;
+      if(e.target.closest('button')) return;
+      const id=row.dataset.id;
+      editDeepwell(id,false); // open view modal (read-only)
+    });
+  });
+}
+
+async function saveDeepwell(dw){
+  await db.collection(DEEPWELLS_COL).doc(dw.id).set(dw);
+}
+
+function gatherDwMonths(){
+  const rows = Array.from(elements.dwMonthsBody.querySelectorAll('tr'));
+  return rows.map(r=>({
+    month: r.querySelector('.dw-month').value,
+    prod: parseFloat(r.querySelector('.dw-prod').value)||0
+  })).filter(m=>m.month && m.prod);
+}
+
+function updateDwStats(){
+  const months = gatherDwMonths();
+  const total = months.reduce((s,m)=>s+m.prod,0);
+  const avg = months.length? (total/months.length):0;
+  document.getElementById('dwTotalProd').value = total? total.toFixed(2):'';
+  document.getElementById('dwAvgProd').value = avg? avg.toFixed(2):'';
+}
+
+elements.dwMonthsBody?.addEventListener('input',updateDwStats);
+
+function addDwMonthRow(data={}){
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td><input type="month" class="form-control form-control-sm dw-month" value="${data.month||''}"/></td>
+                <td><input type="number" step="0.01" class="form-control form-control-sm dw-prod" value="${data.prod||''}"/></td>
+                <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger dw-remove"><i class="fa fa-minus"></i></button></td>`;
+  tr.querySelector('.dw-remove').onclick=()=>{tr.remove();updateDwStats();};
+  elements.dwMonthsBody.appendChild(tr);
+  updateDwStats();
+}
+
+function onSaveDeepwell(e){
+  e.preventDefault();
+  const fd = new FormData(elements.deepwellForm);
+  const id = fd.get('deepwellId') || (crypto.randomUUID?crypto.randomUUID():Date.now().toString(36));
+  // Prepare history
+  const userEmail = firebase.auth().currentUser?.email || 'viewer';
+  const existingDw = deepwells.find(dw=>dw.id===id);
+  const history = existingDw?.history ? [...existingDw.history] : [];
+  history.push({email:userEmail,timestamp:new Date().toISOString(),action:existingDw?'edit':'create'});
+
+  const deepwell = {
+    id,
+    name: fd.get('dwName').trim(),
+    provider: fd.get('dwProvider'),
+    permit: fd.get('dwPermit').trim(),
+    status: fd.get('dwStatus').trim(),
+    ratedYield: parseFloat(fd.get('dwRatedYield'))||0,
+    months: gatherDwMonths(),
+    avgProd: parseFloat(fd.get('dwAvgProd'))||0,
+    totalProd: parseFloat(fd.get('dwTotalProd'))||0,
+    location: fd.get('dwLocation').trim(),
+    municipality: fd.get('dwMunicipality').trim(),
+    history
+  };
+  if(!deepwell.name){alert('Deepwell Name is required');return;}
+  console.log('Saving deepwell', deepwell);
+saveDeepwell(deepwell)
+    .then(() => {
+      // Close modal and reset form
+      elements.deepwellModal.hide();
+      elements.deepwellForm.reset();
+      elements.dwMonthsBody.innerHTML = '';
+      addDwMonthRow();
+      // Optimistically update local list so UI refreshes immediately
+      deepwells = [...deepwells.filter(dwItem => dwItem.id !== deepwell.id), deepwell];
+      renderDeepwells();
+    })
+    .catch(err => alert(err.message));
+}
+
+// Attach deepwell form submit listener robustly
+console.log('Attaching deepwell listeners');
+const deepwellFormEl = document.getElementById('deepwellForm');
+if (deepwellFormEl) {
+  deepwellFormEl.addEventListener('submit', onSaveDeepwell);
+}
+if (elements.addDwMonthBtn) {
+  elements.addDwMonthBtn.addEventListener('click', () => addDwMonthRow());
+}
+if (elements.addDeepwellBtn) {
+  elements.addDeepwellBtn.addEventListener('click', () => {
+    elements.deepwellForm.reset();
+    document.getElementById('deepwellId').value = '';
+    elements.dwMonthsBody.innerHTML = '';
+    addDwMonthRow();
+    updateDwStats();
+  });
+}
+// Fallback: attach click listener directly to Save button in case form submit doesn't fire
+const saveBtn = document.getElementById('saveDeepwellBtn');
+if (saveBtn) {
+  saveBtn.addEventListener('click', (e) => {
+    // Show native validation UI if form is invalid
+    if (!elements.deepwellForm.checkValidity()) {
+      elements.deepwellForm.reportValidity();
+      return;
+    }
+    // Prevent default submission (Bootstrap may auto-close modal)
+    e.preventDefault();
+    onSaveDeepwell(e);
+  });
+}
+
+window.editDeepwell = (id,edit=true)=>{
+  const dw = deepwells.find(x=>x.id===id);
+  if(!dw) return;
+  // populate form
+  document.getElementById('deepwellId').value = dw.id;
+  document.getElementById('dwName').value = dw.name;
+  document.getElementById('dwProvider').value = dw.provider;
+  document.getElementById('dwPermit').value = dw.permit||'';
+  document.getElementById('dwStatus').value = dw.status||'';
+  document.getElementById('dwRatedYield').value = dw.ratedYield||'';
+  document.getElementById('dwAvgProd').value = dw.avgProd||'';
+  document.getElementById('dwTotalProd').value = dw.totalProd||'';
+  // populate months
+  elements.dwMonthsBody.innerHTML='';
+  (dw.months || []).forEach(m => addDwMonthRow(m));
+  if ((dw.months || []).length === 0) addDwMonthRow();
+  updateDwStats();
+  document.getElementById('dwLocation').value = dw.location||'';
+  document.getElementById('dwMunicipality').value = dw.municipality||'';
+  // toggle readonly if just viewing
+  // Toggle readonly/disabled state
+  Array.from(elements.deepwellForm.elements).forEach(el=>{
+    if(el.tagName==='INPUT' || el.tagName==='SELECT'){
+      el.readOnly = !edit;
+      el.disabled = !edit && el.tagName==='SELECT';
+    }
+  });
+
+  // When viewing only, format number fields with commas and switch to text inputs for clarity
+  const numFields = ['dwRatedYield','dwAvgProd','dwTotalProd'];
+  numFields.forEach(id=>{
+    const inp = document.getElementById(id);
+    if(!inp) return;
+    if(edit){
+      // ensure numeric type while editing
+      if(inp.type!=='number') inp.type='number';
+    }else{
+      inp.type='text';
+      inp.value = fmtNum(inp.value);
+    }
+  });
+  // Format monthly production inputs as well when viewing
+  if(!edit){
+    elements.dwMonthsBody.querySelectorAll('.dw-prod').forEach(inp=>{
+      inp.type='text';
+      inp.value = fmtNum(inp.value);
+      inp.readOnly = true;
+    });
+    elements.dwMonthsBody.querySelectorAll('.dw-month').forEach(inp=>{inp.readOnly=true;});
+  }
+
+  // Render edit history
+  const historyContainer = document.getElementById('dwHistoryContainer');
+  if(historyContainer){
+    if((dw.history||[]).length){
+      historyContainer.innerHTML = `<h6>Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${dw.history.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`;
+    }else{
+      historyContainer.innerHTML = '';
+    }
+  }
+
+  document.getElementById('saveDeepwellBtn').style.display = edit?'inline-block':'none';
+  elements.deepwellModal.show();
+};
+
+window.deleteDeepwell = async id=>{
+  if(!isAdmin){alert('Only admin can delete deepwells');return;}
+  if(!confirm('Delete this deepwell?')) return;
+  try{
+    await db.collection(DEEPWELLS_COL).doc(id).delete();
+  }catch(err){alert(err.message);} 
+};
+
+// Tab switching
+function showProjectsSection(){
+  elements.projectsTab.classList.add('active');
+  elements.deepwellsTab.classList.remove('active');
+  elements.projectsSection.style.display='block';
+  elements.deepwellsSection.style.display='none';
+}
+function showDeepwellsSection(){
+  elements.projectsTab.classList.remove('active');
+  elements.deepwellsTab.classList.add('active');
+  elements.projectsSection.style.display='none';
+  elements.deepwellsSection.style.display='block';
+  renderDeepwells();
+}
+
+elements.projectsTab?.addEventListener('click',e=>{e.preventDefault();showProjectsSection();});
+elements.deepwellsTab?.addEventListener('click',e=>{e.preventDefault();showDeepwellsSection();});
+
+// Subscribe to deepwells data when authenticated
+function subscribeDeepwells(){
+  if(unsubscribeDeepwells) unsubscribeDeepwells();
+  unsubscribeDeepwells = db.collection(DEEPWELLS_COL).onSnapshot(snap=>{
+    deepwells = snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderDeepwells();
+  });
+}
+
+// integrate into auth listener: call subscribeDeepwells() when user signed in / anon / viewer
+// called after projects subscription below
+
+// ---- End project functions ----
 
 // Signup handler
   signupForm.addEventListener('submit', e=>{
@@ -410,6 +697,7 @@ const ADMIN_EMAIL_LOWER = ADMIN_EMAIL.toLowerCase();
         isAdmin = false;
         showApp();
         updateAdminUI();
+      subscribeDeepwells();
         if(unsubscribeProjects) unsubscribeProjects();
         unsubscribeProjects = db.collection(PROJECTS_COL).onSnapshot(snap=>{
           projects = snap.docs.map(d=>({id:d.id,...d.data()}));
@@ -430,6 +718,7 @@ const ADMIN_EMAIL_LOWER = ADMIN_EMAIL.toLowerCase();
       }
       showApp();
       updateAdminUI();
+      subscribeDeepwells();
       if(unsubscribeProjects) unsubscribeProjects();
       const legacyKey='construction_projects';
 async function migrateLegacyIfAny(){
@@ -475,6 +764,8 @@ unsubscribeProjects = db.collection(PROJECTS_COL).onSnapshot(async snap => {
       showLogin();
       if(unsubscribeProjects){unsubscribeProjects(); unsubscribeProjects=null;}
       projects=[];
+      if(unsubscribeDeepwells){unsubscribeDeepwells(); unsubscribeDeepwells=null;}
+      deepwells=[];
       render();
     }
   });
