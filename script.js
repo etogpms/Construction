@@ -253,14 +253,14 @@ document.getElementById("projectLocation").value=project.location || '';document
   function projectRowHtml(p){
     const latest = (p.accomplishments || []).slice(-1)[0] || { percent: 0 };
     const curr = latest.percent ?? 0;
-    let actionsHtml = firebase.auth().currentUser ? `<button class="btn btn-sm btn-primary me-1" title="Edit" onclick="editProject('${p.id}')"><i class="fa fa-pencil"></i></button>` : '';
+    let actionsHtml = (!isViewOnly && firebase.auth().currentUser) ? `<button class="btn btn-sm btn-primary me-1" title="Edit" onclick="editProject('${p.id}')"><i class="fa fa-pencil"></i></button>` : '';
     if(isAdmin){
       actionsHtml = `<button class="btn btn-sm btn-primary me-1" title="Edit" onclick="editProject('${p.id}')"><i class="fa fa-pencil"></i></button><button class="btn btn-sm btn-danger" title="Delete" onclick="deleteProject('${p.id}')"><i class="fa fa-trash"></i></button>`;
     }
     return `<tr data-id="${p.id}"><td>${p.name}</td><td>${p.implementingAgency || ''}</td><td>${p.contractor}</td><td><span class="badge bg-${getProjectStatus(p) === 'Delayed' ? 'danger' : 'primary'}">${getProjectStatus(p)}</span></td><td>${p.revisedCompletion || p.originalCompletion}</td><td>${curr}%</td><td class="d-flex gap-1">${actionsHtml}</td></tr>`;
   }
 
-  function render(){const addBtn=document.getElementById('addProjectBtn');if(addBtn) addBtn.style.display=firebase.auth().currentUser?'inline-block':'none';const agencies = [...new Set(projects.map(p => p.implementingAgency))];
+  function render(){const addBtn=document.getElementById('addProjectBtn');if(addBtn) addBtn.style.display=(!isViewOnly && firebase.auth().currentUser)?'inline-block':'none';const agencies = [...new Set(projects.map(p => p.implementingAgency))];
       const prevAgency = elements.agencyFilter.value;
       // rebuild options only if count changed (or first render)
       if(elements.agencyFilter.options.length - 1 !== agencies.length){
@@ -294,7 +294,7 @@ document.getElementById("projectLocation").value=project.location || '';document
 
   window.viewProject=(id)=>{const p=projects.find(proj=>proj.id===id);if(!p) return;const photos=(p.photos&&p.photos.length)?p.photos:(p.sCurveDataUrl?[p.sCurveDataUrl]:[]);
   const billingHtml = (p.progressBilling&&p.progressBilling.length)?`<h6 class="mt-3">Billing Details</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>Amount (PHP)</th><th>Description</th></tr></thead><tbody>${p.progressBilling.map(b=>`<tr><td>${b.date}</td><td>₱${Number(b.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td>${b.desc||''}</td></tr>`).join('')}</tbody></table></div>`:'';const photosHtml=photos.length?`<div class="d-flex gap-3 mb-3 flex-wrap">${photos.slice(0,3).map(url=>`<img src="${url}" class="img-fluid" style="max-height:300px;object-fit:contain;">`).join('')}</div>`:'';const body=document.getElementById('detailsBody');body.innerHTML=`<h5 class="fw-bold mb-2">${p.name}</h5><p><strong>Implementing Agency:</strong> ${p.implementingAgency}</p><p><strong>Contractor:</strong> ${p.contractor}</p>
-<p><strong>Location:</strong> ${p.location || ''}</p><p><strong>Contract Amount:</strong> ₱${Number(p.contractAmount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>${p.revisedContractAmount?`<p><strong>Revised Contract Amount:</strong> ₱${Number(p.revisedContractAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>`:''}<p><strong>Status:</strong> ${getProjectStatus(p)}</p><p><strong>NTP:</strong> ${p.ntpDate}</p><p><strong>Duration:</strong> ${p.originalDuration} days ${p.timeExtension?"+"+p.timeExtension:""}</p><p><strong>Target Completion:</strong> ${p.revisedCompletion||p.originalCompletion}</p>${p.remarks?`<p><strong>Remarks:</strong> ${p.remarks}</p>`:''}${p.otherDetails?`<p><strong>Details:</strong> ${p.otherDetails}</p>`:''}<h6 class="mt-3">Accomplishment History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>% Accomplishment<br>Planned</th><th>% Accomplishment<br>Previous</th><th>% Accomplishment<br>To Date</th><th>Variance %</th><th>Activities</th><th>Issue</th><th>Action Taken</th></tr></thead><tbody>${(p.accomplishments||[]).map(a=>`<tr><td>${a.date}</td><td>${(a.plannedPercent??0).toFixed(2)}%</td><td>${(a.prevPercent??0).toFixed(2)}%</td><td>${(a.percent??0).toFixed(2)}%</td><td>${a.variance>=0?'+':''}${(a.variance??0).toFixed(2)}%</td><td>${a.activities||''}</td><td>${a.issue||p.issues||''}</td><td>${a.action||''}</td></tr>`).join('')}</tbody></table></div>${billingHtml}${(p.history||[]).length?`<h6 class="mt-3">Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${p.history.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`:''}`;body.innerHTML+=photosHtml;const footer=document.getElementById('detailsFooter');footer.innerHTML=`<button class="btn btn-outline-secondary" id="printBtn"><i class="fa fa-print me-1"></i>Print</button><button class="btn btn-outline-success" id="docxBtn"><i class="fa fa-download me-1"></i>Word</button>`;document.getElementById('printBtn').onclick=()=>window.print();document.getElementById('docxBtn').onclick=()=>exportProjectDocx(p);bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal')).show();};
+<p><strong>Location:</strong> ${p.location || ''}</p><p><strong>Contract Amount:</strong> ₱${Number(p.contractAmount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>${p.revisedContractAmount?`<p><strong>Revised Contract Amount:</strong> ₱${Number(p.revisedContractAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>`:''}<p><strong>Status:</strong> ${getProjectStatus(p)}</p><p><strong>NTP:</strong> ${p.ntpDate}</p><p><strong>Duration:</strong> ${p.originalDuration} days ${p.timeExtension?"+"+p.timeExtension:""}</p><p><strong>Target Completion:</strong> ${p.revisedCompletion||p.originalCompletion}</p>${p.remarks?`<p><strong>Remarks:</strong> ${p.remarks}</p>`:''}${p.otherDetails?`<p><strong>Details:</strong> ${p.otherDetails}</p>`:''}<h6 class="mt-3">Accomplishment History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>% Accomplishment<br>Planned</th><th>% Accomplishment<br>Previous</th><th>% Accomplishment<br>To Date</th><th>Variance %</th><th>Activities</th><th>Issue</th><th>Action Taken</th></tr></thead><tbody>${(p.accomplishments||[]).map(a=>`<tr><td>${a.date}</td><td>${(a.plannedPercent??0).toFixed(2)}%</td><td>${(a.prevPercent??0).toFixed(2)}%</td><td>${(a.percent??0).toFixed(2)}%</td><td>${a.variance>=0?'+':''}${(a.variance??0).toFixed(2)}%</td><td>${bulletizeActivities(a.activities)}</td><td>${a.issue||p.issues||''}</td><td>${a.action||''}</td></tr>`).join('')}</tbody></table></div>${billingHtml}${(p.history||[]).length?`<h6 class="mt-3">Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${p.history.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`:''}`;body.innerHTML+=photosHtml;const footer=document.getElementById('detailsFooter');footer.innerHTML=`<button class="btn btn-outline-secondary" id="printBtn"><i class="fa fa-print me-1"></i>Print</button><button class="btn btn-outline-success" id="docxBtn"><i class="fa fa-download me-1"></i>Word</button>`;document.getElementById('printBtn').onclick=()=>window.print();document.getElementById('docxBtn').onclick=()=>exportProjectDocx(p);bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal')).show();};
 
   // simple docx export skipped for brevity ...
 
@@ -330,6 +330,7 @@ document.getElementById("projectLocation").value=project.location || '';document
         console.warn('Anon sign-in unavailable, proceeding without auth');
         isViewOnly = true;
         showApp();
+        subscribeDeepwells();
         if(unsubscribeProjects) unsubscribeProjects();
         unsubscribeProjects = db.collection(PROJECTS_COL).onSnapshot(snap=>{
           projects = snap.docs.map(d=>({id:d.id,...d.data()}));
@@ -354,9 +355,20 @@ function fmtNum(val){
   return isNaN(num)? (val||'') : num.toLocaleString();
 }
 
-// ---- Deepwell CRUD & Rendering ----
+function bulletizeActivities(text){
+  if(!text) return '';
+  // Split by patterns like "1." "2." etc. or semicolons/double line breaks
+  const parts = text.split(/\s*\d+\.\s*|\s*;\s*|\n+/).filter(p=>p.trim());
+  if(parts.length<=1){
+    // If splitting didn't make sense, just return original
+    return text;
+  }
+  return `<ul class="mb-0 ps-3">${parts.map(p=>`<li>${p.trim()}</li>`).join('')}</ul>`;
+}
+
+  // ---- Deepwell CRUD & Rendering ----
 function deepwellRowHtml(dw){
-  let actionsHtml = firebase.auth().currentUser ? `<button class="btn btn-sm btn-primary me-1" title="Edit" onclick="editDeepwell('${dw.id}')"><i class="fa fa-pencil"></i></button>` : '';
+  let actionsHtml = (!isViewOnly && firebase.auth().currentUser) ? `<button class="btn btn-sm btn-primary me-1" title="Edit" onclick="editDeepwell('${dw.id}')"><i class="fa fa-pencil"></i></button>` : '';
   if(isAdmin){
     actionsHtml += `<button class="btn btn-sm btn-danger" title="Delete" onclick="deleteDeepwell('${dw.id}')"><i class="fa fa-trash"></i></button>`;
   }
@@ -373,6 +385,10 @@ function deepwellRowHtml(dw){
 }
 
 function renderDeepwells(){
+  // Show/hide Add Deepwell button based on permissions
+  if(elements.addDeepwellBtn){
+    elements.addDeepwellBtn.style.display = (!isViewOnly && firebase.auth().currentUser) ? 'inline-block' : 'none';
+  }
   let list = deepwells;
   const provider = elements.dwProviderFilter?.value;
   const status   = elements.dwStatusFilter?.value;
@@ -760,6 +776,27 @@ unsubscribeProjects = db.collection(PROJECTS_COL).onSnapshot(async snap => {
         render();
       });
     } else {
+      // No signed-in user. Try to obtain an anonymous session so that public data (projects/deepwells) can be read.
+      try {
+        await firebase.auth().signInAnonymously();
+        // onAuthStateChanged will re-enter with user.isAnonymous true
+        return;
+      } catch(err){
+        console.warn('Auto-anon sign-in failed', err);
+        // Fallback: pure viewer mode without auth
+        isViewOnly = true;
+        isAdmin = false;
+        showApp();
+        updateAdminUI();
+        subscribeDeepwells();
+        if(unsubscribeProjects){unsubscribeProjects(); unsubscribeProjects=null;}
+        unsubscribeProjects = db.collection(PROJECTS_COL).onSnapshot(snap=>{
+          projects = snap.docs.map(d=>({id:d.id,...d.data()}));
+          render();
+        });
+        return;
+      }
+      // If somehow falls through (shouldn't), revert to login screen
       isAdmin = false;
       showLogin();
       if(unsubscribeProjects){unsubscribeProjects(); unsubscribeProjects=null;}
