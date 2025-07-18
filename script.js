@@ -33,6 +33,7 @@
     signupLinks: document.getElementById('signupLinks'),
     manageUsersBtn: document.getElementById('manageUsersBtn'),
     pendingUsersTable: document.getElementById('pendingUsersTable'),
+    approvedUsersTable: document.getElementById('approvedUsersTable'),
     // Deepwell specific
     deepwellsTbody: document.getElementById('deepwellsTbody'),
     dwProviderFilter: document.getElementById('dwProviderFilter'),
@@ -63,7 +64,10 @@
   let projects = [];
   let deepwells = [];
   let isViewOnly = false;
+  let isLevel2 = false; // accessLevel 2 users
+  let elevatedAccess = false; // isAdmin || isLevel2
   let pendingUsers = [];
+  let approvedUsers = [];
   function updatePendingBadge(){
     const badge = document.getElementById('pendingBadge');
     if(!badge) return;
@@ -88,8 +92,10 @@
 
   function updateAdminUI(){
     if(isAdmin){
+      // Only real admins can manage users
       elements.manageUsersBtn.style.display = 'inline-block';
       loadPendingUsers();
+      loadApprovedUsers();
     } else {
       elements.manageUsersBtn.style.display = 'none';
       pendingUsers = [];
@@ -104,6 +110,45 @@
     renderPendingUsersTable();
     updatePendingBadge();
   }catch(err){console.error('Failed to load pending users',err);}
+}
+
+// Load and render approved users list
+async function loadApprovedUsers(){
+  try{
+    const snap = await db.collection('users').where('approved','==',true).get();
+    approvedUsers = snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderApprovedUsersTable();
+      if(window.__refreshChatRecipients) window.__refreshChatRecipients();
+  }catch(err){console.error('Failed to load approved users',err);}  
+}
+
+function renderApprovedUsersTable(){
+  const tbody = elements.approvedUsersTable.querySelector('tbody');
+  tbody.innerHTML='';
+  approvedUsers.forEach(u=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${u.email}</td><td>${u.updatedAt?.toDate?u.updatedAt.toDate().toLocaleString():''}</td><td></td>`;
+    const levelCell = tr.lastElementChild;
+    const select = document.createElement('select');
+    select.className = 'form-select form-select-sm';
+    [1,2].forEach(l=>{
+      const opt=document.createElement('option');
+      opt.value=l;
+      opt.textContent = 'Level '+l;
+      if((u.accessLevel||1)===l) opt.selected=true;
+      select.appendChild(opt);
+    });
+    select.onchange = () => updateUserAccessLevel(u, parseInt(select.value,10));
+    levelCell.appendChild(select);
+    tbody.appendChild(tr);
+  });
+}
+
+async function updateUserAccessLevel(u, level){
+  try{
+    await db.collection('users').doc(u.id).update({accessLevel:level});
+    u.accessLevel = level;
+  }catch(err){alert('Failed to update access level: '+err.message);}  
 }
 
 function renderPendingUsersTable(){
@@ -128,7 +173,7 @@ function renderPendingUsersTable(){
 
 async function approveUser(u){
   try{
-    await db.collection('users').doc(u.id).update({approved:true});
+    await db.collection('users').doc(u.id).update({approved:true, accessLevel:1});
     firebase.auth().sendPasswordResetEmail(u.email).catch(()=>{});
     loadPendingUsers();
   }catch(e){alert(e.message);} 
@@ -201,6 +246,7 @@ async function rejectUser(u){
       contractor:formData.get("contractor"),
       contractAmount:parseFloat(formData.get("contractAmount"))||0,
       revisedContractAmount:formData.get("revisedContractAmount")?parseFloat(formData.get("revisedContractAmount")):null,
+      contractDocsLink: elevatedAccess ? (formData.get("contractDocsLink")?.trim() || '') : (existing.contractDocsLink || ''),
       ntpDate:formData.get("ntpDate"),
       originalDuration:parseInt(formData.get("originalDuration"),10)||0,
       timeExtension:parseInt(formData.get("timeExtension"),10)||0,
@@ -226,14 +272,17 @@ async function rejectUser(u){
     if(files.length){Promise.all(files.map(f=>new Promise((res,rej)=>{const reader=new FileReader();reader.onload=()=>res(reader.result);reader.onerror=rej;reader.readAsDataURL(f);}))).then(async dataUrls=>{project.photos=dataUrls;saveProject(project).catch(err=>alert(err.message));postSaveUI();}).catch(err=>alert(err.message));}else{saveProject(project).then(postSaveUI).catch(err=>alert(err.message));}
   }
 
-  window.deleteProject = async function(id){ if(!isAdmin){alert('Only admin can delete projects');return;} try{await db.collection(PROJECTS_COL).doc(id).delete();projects=projects.filter(p=>p.id!==id);render();}catch(err){alert(err.message);} };
+  window.deleteProject = async function(id){ if(!elevatedAccess){alert('Only admin/level2 can delete projects');return;} try{await db.collection(PROJECTS_COL).doc(id).delete();projects=projects.filter(p=>p.id!==id);render();}catch(err){alert(err.message);} };
 
   function clearForm(){
-  billingContainer.innerHTML='';elements.projectForm.reset();document.getElementById("projectId").value="";["projectPhoto1","projectPhoto2","projectPhoto3"].forEach(id=>{const el=document.getElementById(id);if(el) el.value="";});document.getElementById("actionTaken").value="";document.getElementById("percentAccomplishment").value=0;document.getElementById("percentPrevious").value=0;document.getElementById("percentPlanned").value=0;document.getElementById("accompDate").value="";}
+  billingContainer.innerHTML='';elements.projectForm.reset();document.getElementById("projectId").value="";["projectPhoto1","projectPhoto2","projectPhoto3"].forEach(id=>{const el=document.getElementById(id);if(el) el.value="";});const linkInput=document.getElementById("contractDocsLink");const linkGroup=document.getElementById("contractDocsGroup");linkGroup.style.display = elevatedAccess ? '' : 'none';linkInput.value="";linkInput.disabled=!elevatedAccess;document.getElementById("actionTaken").value="";document.getElementById("percentAccomplishment").value=0;document.getElementById("percentPrevious").value=0;document.getElementById("percentPlanned").value=0;document.getElementById("accompDate").value="";}
 
   function populateForm(project){
   populateBilling(project.progressBilling);document.getElementById("projectId").value=project.id;document.getElementById("projectName").value=project.name;document.getElementById("implementingAgency").value=project.implementingAgency;
-document.getElementById("projectLocation").value=project.location || '';document.getElementById("contractor").value=project.contractor;document.getElementById("contractAmount").value=project.contractAmount;document.getElementById("revisedContractAmount").value=project.revisedContractAmount??'';document.getElementById("ntpDate").value=project.ntpDate;document.getElementById("originalDuration").value=project.originalDuration;document.getElementById("timeExtension").value=project.timeExtension;document.getElementById("originalCompletion").value=project.originalCompletion;document.getElementById("revisedCompletion").value=project.revisedCompletion;document.getElementById("activities").value=project.activities;document.getElementById("issues").value=project.issues;document.getElementById("actionTaken").value="";document.getElementById("remarks").value=project.remarks;document.getElementById("otherDetails").value=project.otherDetails;const last=(project.accomplishments||[]).slice(-1)[0]||{percent:0,prevPercent:0,date:""};document.getElementById("percentPrevious").value=last.prevPercent??last.percent??0;document.getElementById("percentPlanned").value=last.plannedPercent??0;document.getElementById("percentAccomplishment").value=last.percent??0;document.getElementById("accompDate").value=last.date;document.getElementById("actionTaken").value=last.action||"";}
+document.getElementById("projectLocation").value=project.location || '';document.getElementById("contractor").value=project.contractor;document.getElementById("contractAmount").value=project.contractAmount;document.getElementById("revisedContractAmount").value=project.revisedContractAmount??'';
+const linkGroup=document.getElementById("contractDocsGroup");const linkInput=document.getElementById("contractDocsLink");linkGroup.style.display = elevatedAccess ? '' : 'none';
+linkInput.value = project.contractDocsLink || '';
+linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=project.ntpDate;document.getElementById("originalDuration").value=project.originalDuration;document.getElementById("timeExtension").value=project.timeExtension;document.getElementById("originalCompletion").value=project.originalCompletion;document.getElementById("revisedCompletion").value=project.revisedCompletion;document.getElementById("activities").value=project.activities;document.getElementById("issues").value=project.issues;document.getElementById("actionTaken").value="";document.getElementById("remarks").value=project.remarks;document.getElementById("otherDetails").value=project.otherDetails;const last=(project.accomplishments||[]).slice(-1)[0]||{percent:0,prevPercent:0,date:""};document.getElementById("percentPrevious").value=last.prevPercent??last.percent??0;document.getElementById("percentPlanned").value=last.plannedPercent??0;document.getElementById("percentAccomplishment").value=last.percent??0;document.getElementById("accompDate").value=last.date;document.getElementById("actionTaken").value=last.action||"";}
 
   function getProjectStatus(p){
       const latest = (p.accomplishments || []).slice(-1)[0];
@@ -294,9 +343,240 @@ document.getElementById("projectLocation").value=project.location || '';document
 
   window.viewProject=(id)=>{const p=projects.find(proj=>proj.id===id);if(!p) return;const photos=(p.photos&&p.photos.length)?p.photos:(p.sCurveDataUrl?[p.sCurveDataUrl]:[]);
   const billingHtml = (p.progressBilling&&p.progressBilling.length)?`<h6 class="mt-3">Billing Details</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>Amount (PHP)</th><th>Description</th></tr></thead><tbody>${p.progressBilling.map(b=>`<tr><td>${b.date}</td><td>₱${Number(b.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td>${b.desc||''}</td></tr>`).join('')}</tbody></table></div>`:'';const photosHtml=photos.length?`<div class="d-flex gap-3 mb-3 flex-wrap">${photos.slice(0,3).map(url=>`<img src="${url}" class="img-fluid" style="max-height:300px;object-fit:contain;">`).join('')}</div>`:'';const body=document.getElementById('detailsBody');body.innerHTML=`<h5 class="fw-bold mb-2">${p.name}</h5><p><strong>Implementing Agency:</strong> ${p.implementingAgency}</p><p><strong>Contractor:</strong> ${p.contractor}</p>
-<p><strong>Location:</strong> ${p.location || ''}</p><p><strong>Contract Amount:</strong> ₱${Number(p.contractAmount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>${p.revisedContractAmount?`<p><strong>Revised Contract Amount:</strong> ₱${Number(p.revisedContractAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>`:''}<p><strong>Status:</strong> ${getProjectStatus(p)}</p><p><strong>NTP:</strong> ${p.ntpDate}</p><p><strong>Duration:</strong> ${p.originalDuration} days ${p.timeExtension?"+"+p.timeExtension:""}</p><p><strong>Target Completion:</strong> ${p.revisedCompletion||p.originalCompletion}</p>${p.remarks?`<p><strong>Remarks:</strong> ${p.remarks}</p>`:''}${p.otherDetails?`<p><strong>Details:</strong> ${p.otherDetails}</p>`:''}<h6 class="mt-3">Accomplishment History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>% Accomplishment<br>Planned</th><th>% Accomplishment<br>Previous</th><th>% Accomplishment<br>To Date</th><th>Variance %</th><th>Activities</th><th>Issue</th><th>Action Taken</th></tr></thead><tbody>${(p.accomplishments||[]).map(a=>`<tr><td>${a.date}</td><td>${(a.plannedPercent??0).toFixed(2)}%</td><td>${(a.prevPercent??0).toFixed(2)}%</td><td>${(a.percent??0).toFixed(2)}%</td><td>${a.variance>=0?'+':''}${(a.variance??0).toFixed(2)}%</td><td>${bulletizeActivities(a.activities)}</td><td>${a.issue||p.issues||''}</td><td>${a.action||''}</td></tr>`).join('')}</tbody></table></div>${billingHtml}${(p.history||[]).length?`<h6 class="mt-3">Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${p.history.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`:''}`;body.innerHTML+=photosHtml;const footer=document.getElementById('detailsFooter');footer.innerHTML=`<button class="btn btn-outline-secondary" id="printBtn"><i class="fa fa-print me-1"></i>Print</button><button class="btn btn-outline-success" id="docxBtn"><i class="fa fa-download me-1"></i>Word</button>`;document.getElementById('printBtn').onclick=()=>window.print();document.getElementById('docxBtn').onclick=()=>exportProjectDocx(p);bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal')).show();};
+<p><strong>Location:</strong> ${p.location || ''}</p><p><strong>Contract Amount:</strong> ₱${Number(p.contractAmount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>${p.revisedContractAmount?`<p><strong>Revised Contract Amount:</strong> ₱${Number(p.revisedContractAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>`:''}<p><strong>Status:</strong> ${getProjectStatus(p)}</p><p><strong>NTP:</strong> ${p.ntpDate}</p><p><strong>Duration:</strong> ${p.originalDuration} days ${p.timeExtension?"+"+p.timeExtension:""}</p><p><strong>Target Completion:</strong> ${p.revisedCompletion||p.originalCompletion}</p>${p.remarks?`<p><strong>Remarks:</strong> ${p.remarks}</p>`:''}${p.otherDetails?`<p><strong>Details:</strong> ${p.otherDetails}</p>`:''}${p.contractDocsLink?`<p><strong>Contract Docs:</strong> ${elevatedAccess?`<a href="${p.contractDocsLink}" target="_blank">Open</a>`:`<span class="text-muted">No authority to access</span>`}</p>`:''}<h6 class="mt-3">Accomplishment History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>% Accomplishment<br>Planned</th><th>% Accomplishment<br>Previous</th><th>% Accomplishment<br>To Date</th><th>Variance %</th><th>Activities</th><th>Issue</th><th>Action Taken</th></tr></thead><tbody>${(p.accomplishments||[]).map(a=>`<tr><td>${a.date}</td><td>${(a.plannedPercent??0).toFixed(2)}%</td><td>${(a.prevPercent??0).toFixed(2)}%</td><td>${(a.percent??0).toFixed(2)}%</td><td>${a.variance>=0?'+':''}${(a.variance??0).toFixed(2)}%</td><td>${bulletizeActivities(a.activities)}</td><td>${a.issue||p.issues||''}</td><td>${a.action||''}</td></tr>`).join('')}</tbody></table></div>${billingHtml}${(p.history||[]).length?`<h6 class="mt-3">Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${p.history.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`:''}`;body.innerHTML+=photosHtml;const footer=document.getElementById('detailsFooter');footer.innerHTML=`<button class="btn btn-outline-secondary" id="printBtn"><i class="fa fa-print me-1"></i>Print</button><button class="btn btn-outline-success" id="docxBtn"><i class="fa fa-download me-1"></i>Word</button>`;document.getElementById('printBtn').onclick=()=>window.print();document.getElementById('docxBtn').onclick=()=>exportProjectDocx(p);bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal')).show();};
 
   // simple docx export skipped for brevity ...
+
+/* ----------------- Chat Feature ----------------- */
+(function(){
+  const chatBtn = document.getElementById('chatBtn');
+  const chatWindow = document.getElementById('chatWindow');
+  const chatClose = document.getElementById('chatClose');
+  const chatMessages = document.getElementById('chatMessages');
+  const chatRecipient = document.getElementById('chatRecipient');
+  const chatInput = document.getElementById('chatInput');
+  const chatSend = document.getElementById('chatSend');
+  const chatClear = document.getElementById('chatClear');
+  let clearBtn = document.getElementById('chatClear');
+  function ensureClearBtn(){
+    const user = firebase.auth().currentUser;
+    const email = user && user.email ? user.email.trim().toLowerCase() : '';
+    const isAdminNow = email === 'johnlowel.fradejas@mwss.gov.ph';
+    if(!isAdminNow) return;
+    if(!document.getElementById('chatClear')){
+      const header = chatWindow.querySelector('.card-header');
+      if(header){
+        const btn=document.createElement('button');
+        btn.type='button';
+        btn.className='btn btn-sm btn-danger ms-auto me-1';
+        btn.id='chatClear';
+        btn.title='Clear Chat';
+        btn.innerHTML='<i class="fa fa-trash"></i>';
+        header.insertBefore(btn, header.querySelector('#chatClose'));
+        clearBtn = btn;
+        attachClearHandler();
+      }
+    }else{
+      clearBtn = document.getElementById('chatClear');
+      clearBtn.classList.toggle('d-none', false);
+    }
+  }
+  function attachClearHandler(){
+    if(!clearBtn) return;
+    clearBtn.addEventListener('click', async ()=>{
+      if(!isAdmin) return;
+      if(!confirm('Delete ALL chat messages?')) return;
+      clearBtn.disabled = true;
+      try{
+        const snap = await db.collection('messages').get();
+        const batch = db.batch();
+        snap.docs.forEach(doc=>batch.delete(doc.ref));
+        await batch.commit();
+        chatMessages.innerHTML='';
+      }catch(err){
+        alert('Failed to clear messages: '+err.message);
+        console.error('Clear chat error',err);
+      }finally{
+        clearBtn.disabled = false;
+      }
+    });
+  }
+  ensureClearBtn();
+  if(!chatBtn) return; // html not loaded yet
+  firebase.auth().onAuthStateChanged(()=>{
+    ensureClearBtn();
+  });
+  if(chatClear){
+    chatClear.addEventListener('click', async ()=>{
+      if(!isAdmin) return;
+      if(!confirm('Delete ALL chat messages?')) return;
+      chatClear.disabled = true;
+      try{
+        const snap = await db.collection('messages').get();
+        const batch = db.batch();
+        snap.docs.forEach(doc=>batch.delete(doc.ref));
+        await batch.commit();
+        chatMessages.innerHTML='';
+      }catch(err){
+        alert('Failed to clear messages: '+err.message);
+        console.error('Clear chat error',err);
+      }finally{
+        chatClear.disabled = false;
+      }
+    });
+  }
+  // ----- Draggable button -----
+  try{
+    const stored = JSON.parse(localStorage.getItem('chatBtnPos')||'{}');
+    if(stored.left!=null && stored.top!=null){
+      chatBtn.style.left = stored.left + 'px';
+      chatBtn.style.top = stored.top + 'px';
+      chatBtn.style.right = 'auto';
+      chatBtn.style.bottom = 'auto';
+    }
+  }catch{}
+  chatBtn.style.position = 'fixed';
+  let dragOffsetX=0, dragOffsetY=0, dragging=false;
+  chatBtn.addEventListener('mousedown',e=>{
+    // ignore right-click
+    if(e.button!==0) return;
+    dragging=true;
+    dragOffsetX = e.clientX - chatBtn.getBoundingClientRect().left;
+    dragOffsetY = e.clientY - chatBtn.getBoundingClientRect().top;
+    document.body.style.userSelect='none';
+  });
+  window.addEventListener('mousemove',e=>{
+    if(!dragging) return;
+    const left = e.clientX - dragOffsetX;
+    const top = e.clientY - dragOffsetY;
+    const newLeft = Math.max(0, Math.min(window.innerWidth-60, left));
+    const newTop = Math.max(0, Math.min(window.innerHeight-60, top));
+    chatBtn.style.left = newLeft + 'px';
+    chatBtn.style.top = newTop + 'px';
+    chatBtn.style.right = 'auto';
+    chatBtn.style.bottom = 'auto';
+    if(chatWindow.style.display!=='none') positionChatWindow();
+  });
+  window.addEventListener('mouseup',()=>{
+    if(dragging){
+      dragging=false;
+      document.body.style.userSelect='';
+      localStorage.setItem('chatBtnPos', JSON.stringify({left: parseInt(chatBtn.style.left), top: parseInt(chatBtn.style.top)}));
+    }
+  });
+
+  let msgsUnsub = null;
+
+  function showChatBtn(){ chatBtn.style.display='inline-flex'; }
+  function hideChatBtn(){ chatBtn.style.display='none'; }
+
+  // populate recipients when approvedUsers list loads
+  function refreshRecipients(){
+    if(!approvedUsers) return;
+    const selected = chatRecipient.value;
+    chatRecipient.innerHTML='<option value="all">All</option>';
+    approvedUsers.forEach(u=>{
+      const opt=document.createElement('option');
+      opt.value=u.id;
+      opt.textContent=u.email;
+      chatRecipient.appendChild(opt);
+    });
+    if([...chatRecipient.options].some(o=>o.value===selected)) chatRecipient.value=selected;
+  }
+
+  // render a message bubble
+  function appendMsg(m){
+    const self = firebase.auth().currentUser?.uid === m.fromId;
+    const div = document.createElement('div');
+    div.className = 'mb-1';
+    // format timestamp if present
+    let ts='';
+    if(m.timestamp){
+      const d = m.timestamp.toDate ? m.timestamp.toDate() : (m.timestamp.seconds? new Date(m.timestamp.seconds*1000) : new Date(m.timestamp));
+      ts = d.toLocaleString(undefined,{hour:'2-digit',minute:'2-digit',hour12:false,month:'short',day:'numeric'});
+    }
+    const header = `${self?'Me':m.fromEmail}${m.toId ? ' ➜ PM':''}`;
+    div.innerHTML = `<small class="text-muted d-block">${header} <span style="font-size:10px">${ts}</span></small>`+
+                    `<div class="p-2 rounded ${self?'bg-primary text-white ms-auto':'bg-light'}" style="max-width:80%;word-wrap:break-word;">${m.text}</div>`;
+    div.style.display='flex';
+    div.style.flexDirection='column';
+    div.style.alignItems = self?'flex-end':'flex-start';
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function startListening(){
+    if(msgsUnsub) msgsUnsub();
+    const uid = firebase.auth().currentUser.uid;
+    msgsUnsub = db.collection('messages').orderBy('timestamp','asc').onSnapshot(snap=>{
+      chatMessages.innerHTML='';
+      snap.forEach(doc=>{
+        const m = doc.data();
+        if(!m.toId || m.toId===uid || m.fromId===uid){
+          appendMsg(m);
+          if(chatWindow.style.display==='none' && m.fromId!==uid){
+            chatBtn.classList.add('animate__animated','animate__tada');
+            setTimeout(()=>chatBtn.classList.remove('animate__animated','animate__tada'),1000);
+          }
+        }
+      });
+    });
+  }
+
+  // send message
+  async function sendMessage(){
+    const txt = chatInput.value.trim();
+    if(!txt) return;
+    const toVal = chatRecipient.value;
+    const user = firebase.auth().currentUser;
+    // optimistic append
+    appendMsg({text:txt,fromId:user.uid,fromEmail:user.email,toId:toVal==='all'?null:toVal,timestamp:new Date()});
+    chatInput.value='';
+    try{
+      await db.collection('messages').add({
+        text: txt,
+        fromId: user.uid,
+        fromEmail: user.email,
+        toId: toVal==='all'? null : toVal,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }catch(err){
+      alert('Failed to send: '+err.message);
+      console.error('sendMessage error',err);
+    }
+  }
+
+  function positionChatWindow(){
+    const btnRect = chatBtn.getBoundingClientRect();
+    const winWidth = 300; // set in css
+    const winHeight = 400;
+    let left = btnRect.left;
+    if(left + winWidth > window.innerWidth) left = window.innerWidth - winWidth - 10;
+    let top = btnRect.top - winHeight - 10;
+    if(top < 0) top = btnRect.top + 60; // place below button if not enough space
+    chatWindow.style.left = left + 'px';
+    chatWindow.style.top = top + 'px';
+  }
+  chatBtn.onclick=()=>{positionChatWindow();chatWindow.style.display='flex';chatBtn.classList.remove('animate__animated','animate__tada');};
+  chatClose.onclick=()=>{chatWindow.style.display='none';};
+  chatSend.onclick=sendMessage;
+  chatInput.addEventListener('keyup',e=>{if(e.key==='Enter') sendMessage();});
+
+  // expose for other functions
+  window.__refreshChatRecipients = refreshRecipients;
+
+  // show btn when user logged in & approved
+  firebase.auth().onAuthStateChanged(user=>{
+    if(user && !user.isAnonymous){
+      // approved check already done earlier
+      showChatBtn();
+      startListening();
+    }else{
+      hideChatBtn();
+      if(msgsUnsub) msgsUnsub();
+    }
+  });
+})();
 
   /* Page Scroll & Modal Scroll Buttons */
   const scrollTopBtn=document.getElementById('scrollTopBtn');
@@ -589,7 +869,7 @@ window.editDeepwell = (id,edit=true)=>{
 };
 
 window.deleteDeepwell = async id=>{
-  if(!isAdmin){alert('Only admin can delete deepwells');return;}
+  if(!elevatedAccess){alert('Only admin/level2 can delete deepwells');return;}
   if(!confirm('Delete this deepwell?')) return;
   try{
     await db.collection(DEEPWELLS_COL).doc(id).delete();
@@ -724,16 +1004,27 @@ const ADMIN_EMAIL_LOWER = ADMIN_EMAIL.toLowerCase();
       const emailLower = (user.email||'').trim().toLowerCase();
       isAdmin = emailLower === ADMIN_EMAIL_LOWER;
       console.log('Signed-in as', user.email, '| isAdmin?', isAdmin);
-      if(!isAdmin){
+      // Determine user access level
+      if(isAdmin){
+        isLevel2 = false;
+        elevatedAccess = true;
+      }else{
         const doc = await db.collection('users').doc(user.uid).get();
         if(!doc.exists || doc.data().approved!==true){
           alert('Your account is pending approval.');
           firebase.auth().signOut();
           return;
         }
+        const lvl = doc.data().accessLevel || 1;
+        isLevel2 = lvl === 2;
+        elevatedAccess = isLevel2; // admins already handled above
       }
       showApp();
       updateAdminUI();
+      // Ensure approved users list is available for chat recipients even for non-admins
+      if(!isAdmin){
+        loadApprovedUsers();
+      }
       subscribeDeepwells();
       if(unsubscribeProjects) unsubscribeProjects();
       const legacyKey='construction_projects';
@@ -776,33 +1067,16 @@ unsubscribeProjects = db.collection(PROJECTS_COL).onSnapshot(async snap => {
         render();
       });
     } else {
-      // No signed-in user. Try to obtain an anonymous session so that public data (projects/deepwells) can be read.
-      try {
-        await firebase.auth().signInAnonymously();
-        // onAuthStateChanged will re-enter with user.isAnonymous true
-        return;
-      } catch(err){
-        console.warn('Auto-anon sign-in failed', err);
-        // Fallback: pure viewer mode without auth
-        isViewOnly = true;
-        isAdmin = false;
-        showApp();
-        updateAdminUI();
-        subscribeDeepwells();
-        if(unsubscribeProjects){unsubscribeProjects(); unsubscribeProjects=null;}
-        unsubscribeProjects = db.collection(PROJECTS_COL).onSnapshot(snap=>{
-          projects = snap.docs.map(d=>({id:d.id,...d.data()}));
-          render();
-        });
-        return;
-      }
-      // If somehow falls through (shouldn't), revert to login screen
+      // No user signed in: stay on the login screen until the user authenticates.
       isAdmin = false;
+      isViewOnly = false;
       showLogin();
+      updateAdminUI();
+      // Clean up any active listeners from previous sessions
       if(unsubscribeProjects){unsubscribeProjects(); unsubscribeProjects=null;}
-      projects=[];
       if(unsubscribeDeepwells){unsubscribeDeepwells(); unsubscribeDeepwells=null;}
-      deepwells=[];
+      projects = [];
+      deepwells = [];
       render();
     }
   });
@@ -828,6 +1102,7 @@ unsubscribeProjects = db.collection(PROJECTS_COL).onSnapshot(async snap => {
   elements.manageUsersBtn.addEventListener('click', ()=>{
     if(!isAdmin) return;
     loadPendingUsers();
+    loadApprovedUsers();
     bootstrap.Modal.getOrCreateInstance(document.getElementById('usersModal')).show();
   });
 
