@@ -350,6 +350,47 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
 /* ----------------- Chat Feature ----------------- */
 (function(){
   const chatBtn = document.getElementById('chatBtn');
+  let chatNotifBadge = document.getElementById('chatNotifBadge');
+  if(!chatNotifBadge){
+    chatNotifBadge = document.createElement('span');
+    chatNotifBadge.id='chatNotifBadge';
+    chatNotifBadge.className='position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger';
+    chatNotifBadge.style.display='none';
+    chatNotifBadge.style.fontSize='10px';
+    chatBtn.style.position='relative';
+    chatBtn.appendChild(chatNotifBadge);
+  }
+  function updateBadge(){
+    const total = Object.values(unreadCounts).reduce((a,b)=>a+b,0);
+    if(total>0){
+      chatNotifBadge.textContent = total;
+      chatNotifBadge.style.display='inline-block';
+    }else{
+      chatNotifBadge.style.display='none';
+    }
+  }
+  // Toast container for notifications
+  const toastContainer = document.createElement('div');
+  toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+  toastContainer.style.zIndex = '1080';
+  document.body.appendChild(toastContainer);
+  function notifyPm(fromEmail){
+    if(!fromEmail) return;
+    // increment badge
+    if(chatNotifBadge){
+      const n = parseInt(chatNotifBadge.textContent||'0',10)+1;
+      chatNotifBadge.textContent = n;
+      chatNotifBadge.style.display='inline-block';
+    }
+    const div = document.createElement('div');
+    div.className = 'toast align-items-center text-bg-primary border-0';
+    div.role='alert';
+    div.ariaLive='assertive';
+    div.ariaAtomic='true';
+    div.innerHTML = `<div class="d-flex"><div class="toast-body">New message from ${fromEmail}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div>`;
+    toastContainer.appendChild(div);
+    new bootstrap.Toast(div,{delay:5000}).show();
+  }
   const chatWindow = document.getElementById('chatWindow');
   const chatClose = document.getElementById('chatClose');
   const chatMessages = document.getElementById('chatMessages');
@@ -466,26 +507,62 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
   });
 
   let msgsUnsub = null;
+  const unreadCounts = {}; // {fromId: number}
+  let ADMIN_UID = null;
+  async function ensureAdminUid(){
+    if(ADMIN_UID) return ADMIN_UID;
+    try{
+      const snap = await db.collection('users').where('email','==',ADMIN_EMAIL).limit(1).get();
+      if(!snap.empty){
+        ADMIN_UID = snap.docs[0].id;
+      }
+    }catch(err){console.error('Failed to fetch admin uid',err);}  
+    return ADMIN_UID;
+  }
 
   function showChatBtn(){ chatBtn.style.display='inline-flex'; }
   function hideChatBtn(){ chatBtn.style.display='none'; }
 
   // populate recipients when approvedUsers list loads
   function refreshRecipients(){
+    const uid = firebase.auth().currentUser?.uid;
+    
     if(!approvedUsers) return;
     const selected = chatRecipient.value;
-    chatRecipient.innerHTML='<option value="all">All</option>';
+    chatRecipient.innerHTML='<option value="all">All</option>'; // reset (broadcast)
     approvedUsers.forEach(u=>{
       const opt=document.createElement('option');
       opt.value=u.id;
-      opt.textContent=u.email;
+      const cnt = unreadCounts[u.id]||0;
+      opt.textContent = u.email + (cnt>0?` (${cnt})`:'');
       chatRecipient.appendChild(opt);
     });
-    if([...chatRecipient.options].some(o=>o.value===selected)) chatRecipient.value=selected;
+
+    // ensure admin entry
+    // add admin email entry by email string if missing
+    if(![...chatRecipient.options].some(o=>o.value===ADMIN_EMAIL_LOWER)){
+      const cntA = unreadCounts[ADMIN_EMAIL_LOWER]||0;
+      const opt=document.createElement('option');
+      opt.value=ADMIN_EMAIL_LOWER;
+      opt.textContent=ADMIN_EMAIL + (cntA>0?` (${cntA})`:'');
+      chatRecipient.appendChild(opt);
+    }
+
+    // previous uid-based addition retained for future
+    ensureAdminUid().then(uidAdmin=>{
+      if(uidAdmin && ![...chatRecipient.options].some(o=>o.value===uidAdmin)){
+        const cntA = unreadCounts[uidAdmin]||0;
+        const opt=document.createElement('option');
+        opt.value=uidAdmin;
+        opt.textContent=ADMIN_EMAIL + (cntA>0?` (${cntA})`:'');
+        chatRecipient.appendChild(opt);
+      }
+      if([...chatRecipient.options].some(o=>o.value===selected)) chatRecipient.value=selected;
+    });
   }
 
   // render a message bubble
-  function appendMsg(m){
+  function appendMsg(m, canDelete=false){
     const self = firebase.auth().currentUser?.uid === m.fromId;
     const div = document.createElement('div');
     div.className = 'mb-1';
@@ -496,8 +573,36 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
       ts = d.toLocaleString(undefined,{hour:'2-digit',minute:'2-digit',hour12:false,month:'short',day:'numeric'});
     }
     const header = `${self?'Me':m.fromEmail}${m.toId ? ' ➜ PM':''}`;
-    div.innerHTML = `<small class="text-muted d-block">${header} <span style="font-size:10px">${ts}</span></small>`+
-                    `<div class="p-2 rounded ${self?'bg-primary text-white ms-auto':'bg-light'}" style="max-width:80%;word-wrap:break-word;">${m.text}</div>`;
+    const bubble = document.createElement('div');
+    bubble.className = `p-2 rounded ${self?'bg-primary text-white ms-auto':'bg-light'}`;
+    bubble.style.maxWidth='80%';
+    bubble.style.wordWrap='break-word';
+    bubble.textContent = m.text;
+    bubble.dataset.id = m.id || '';
+
+    if(canDelete){
+      const delBtn = document.createElement('button');
+      delBtn.type='button';
+      delBtn.className='btn btn-sm btn-link text-danger ms-1';
+      delBtn.innerHTML='<i class="fa fa-trash"></i>';
+      delBtn.title='Delete message';
+      delBtn.onclick = async ()=>{
+        if(!confirm('Delete this message?')) return;
+        try{
+          await db.collection('messages').doc(m.id).delete();
+        }catch(err){alert('Failed to delete: '+err.message);}
+      };
+      const flex = document.createElement('div');
+      flex.style.display='flex';
+      flex.style.alignItems='center';
+      flex.appendChild(bubble);
+      flex.appendChild(delBtn);
+      div.innerHTML = `<small class="text-muted d-block">${header} <span style="font-size:10px">${ts}</span></small>`;
+      div.appendChild(flex);
+    }else{
+      div.innerHTML = `<small class="text-muted d-block">${header} <span style="font-size:10px">${ts}</span></small>`;
+      div.appendChild(bubble);
+    }
     div.style.display='flex';
     div.style.flexDirection='column';
     div.style.alignItems = self?'flex-end':'flex-start';
@@ -505,23 +610,63 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
     chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 
+  // --- Messaging filtering logic ---
+  let allMessages = [];
+  function renderMessages(){
+    const uid = firebase.auth().currentUser.uid;
+    const sel = chatRecipient.value; // 'all' for broadcast or userId / email for PM
+    chatMessages.innerHTML = '';
+    allMessages.forEach(m=>{
+      if(sel==='all'){
+        if(!m.toId){ // broadcast only
+          appendMsg(m, m.fromId===uid);
+        }
+      }else{
+        // Private thread between current user and selected recipient
+        const other = sel; // could be uid or email string
+        if(m.toId===null) return; // skip broadcasts
+        const fromSelf = m.fromId===uid;
+        const fromOther = m.fromId===other || (m.fromEmail && m.fromEmail.toLowerCase()===other);
+        const toOther   = m.toId===other || (typeof m.toId==='string' && m.toId.toLowerCase && m.toId.toLowerCase()===other);
+        const a = fromSelf && toOther; // message I sent to other
+        const b = fromOther && m.toId===uid; // message other sent to me
+        if(a || b){
+          appendMsg(m, m.fromId===uid);
+          // mark as read
+          unreadCounts[other]=0;
+          updateBadge();
+        }
+      }
+    });
+  }
+
   function startListening(){
     if(msgsUnsub) msgsUnsub();
     const uid = firebase.auth().currentUser.uid;
     msgsUnsub = db.collection('messages').orderBy('timestamp','asc').onSnapshot(snap=>{
-      chatMessages.innerHTML='';
+      allMessages = [];
       snap.forEach(doc=>{
         const m = doc.data();
-        if(!m.toId || m.toId===uid || m.fromId===uid){
-          appendMsg(m);
+        if(!m.toId || m.toId===uid || m.fromId===uid || (isAdmin && m.toId===ADMIN_EMAIL_LOWER)){
+          allMessages.push({id:doc.id,...m});
+          if(m.toId===uid && m.fromId!==uid){
+            unreadCounts[m.fromId] = (unreadCounts[m.fromId]||0)+1;
+            updateBadge();
+            notifyPm(m.fromEmail);
+          }
           if(chatWindow.style.display==='none' && m.fromId!==uid){
             chatBtn.classList.add('animate__animated','animate__tada');
             setTimeout(()=>chatBtn.classList.remove('animate__animated','animate__tada'),1000);
           }
         }
       });
+      refreshRecipients();
+      renderMessages();
     });
   }
+
+  // Re-render when recipient changes
+  chatRecipient.addEventListener('change', renderMessages);
 
   // send message
   async function sendMessage(){
@@ -530,7 +675,7 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
     const toVal = chatRecipient.value;
     const user = firebase.auth().currentUser;
     // optimistic append
-    appendMsg({text:txt,fromId:user.uid,fromEmail:user.email,toId:toVal==='all'?null:toVal,timestamp:new Date()});
+    appendMsg({text:txt,fromId:user.uid,fromEmail:user.email,toId:toVal==='all'?null:toVal,timestamp:new Date()}, true);
     chatInput.value='';
     try{
       await db.collection('messages').add({
