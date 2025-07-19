@@ -347,26 +347,29 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
 
   // simple docx export skipped for brevity ...
 
-/* ----------------- Chat Feature ----------------- */
+/* ----------------- Facebook Messenger Feature ----------------- */
 (function(){
-  const chatBtn = document.getElementById('chatBtn');
-  let chatNotifBadge = document.getElementById('chatNotifBadge');
-  if(!chatNotifBadge){
-    chatNotifBadge = document.createElement('span');
-    chatNotifBadge.id='chatNotifBadge';
-    chatNotifBadge.className='position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger';
-    chatNotifBadge.style.display='none';
-    chatNotifBadge.style.fontSize='10px';
-    chatBtn.style.position='relative';
-    chatBtn.appendChild(chatNotifBadge);
-  }
+  const messengerToggle = document.getElementById('messengerToggle');
+  const messengerSidebar = document.getElementById('messengerSidebar');
+  const messengerClose = document.getElementById('messengerClose');
+  const messengerBadge = document.getElementById('messengerBadge');
+  const msgContainer = document.getElementById('chatMessages');
+  const msgInput = document.getElementById('chatInput');
+  const msgSend = document.getElementById('chatSend');
+  const contactsList = document.getElementById('contactsList');
+  const messengerClear = document.getElementById('messengerClear');
+  
+  let currentChat = 'all';
+  let currentChatTitle = 'General Chat';
+  let currentChatAvatar = 'fa-users';
+  
   function updateBadge(){
     const total = Object.values(unreadCounts).reduce((a,b)=>a+b,0);
     if(total>0){
-      chatNotifBadge.textContent = total;
-      chatNotifBadge.style.display='inline-block';
+      messengerBadge.textContent = total;
+      messengerBadge.style.display='inline-block';
     }else{
-      chatNotifBadge.style.display='none';
+      messengerBadge.style.display='none';
     }
   }
   // Toast container for notifications
@@ -374,14 +377,10 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
   toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
   toastContainer.style.zIndex = '1080';
   document.body.appendChild(toastContainer);
+  
   function notifyPm(fromEmail){
     if(!fromEmail) return;
-    // increment badge
-    if(chatNotifBadge){
-      const n = parseInt(chatNotifBadge.textContent||'0',10)+1;
-      chatNotifBadge.textContent = n;
-      chatNotifBadge.style.display='inline-block';
-    }
+    updateBadge();
     const div = document.createElement('div');
     div.className = 'toast align-items-center text-bg-primary border-0';
     div.role='alert';
@@ -391,99 +390,82 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
     toastContainer.appendChild(div);
     new bootstrap.Toast(div,{delay:5000}).show();
   }
-  const chatWindow = document.getElementById('chatWindow');
-  const chatClose = document.getElementById('chatClose');
-  const chatMessages = document.getElementById('chatMessages');
-  const chatRecipient = document.getElementById('chatRecipient');
-  const chatInput = document.getElementById('chatInput');
-  const chatSend = document.getElementById('chatSend');
-  const chatClear = document.getElementById('chatClear');
-  let clearBtn = document.getElementById('chatClear');
+  
+  // Messenger UI Functions
+  function showMessenger(){
+    messengerSidebar.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+  
+  function hideMessenger(){
+    messengerSidebar.style.display = 'none';
+    document.body.style.overflow = '';
+  }
+  
+  function switchChat(chatId, title, avatar){
+    currentChat = chatId;
+    currentChatTitle = title;
+    currentChatAvatar = avatar;
+    
+    // Update active contact
+    document.querySelectorAll('.contact-item').forEach(item => {
+      item.classList.toggle('active', item.dataset.chat === chatId);
+    });
+    
+    // Update chat header
+    const chatTitle = document.querySelector('.chat-title');
+    const chatAvatar = document.querySelector('.chat-avatar i');
+    if(chatTitle) chatTitle.textContent = title;
+    if(chatAvatar) chatAvatar.className = `fa ${avatar}`;
+    
+    // Clear unread count for this chat
+    if(unreadCounts[chatId]) {
+      unreadCounts[chatId] = 0;
+      updateBadge();
+      updateContactsList();
+    }
+    
+    renderMessages();
+  }
+  // Old chat elements removed - using Facebook Messenger elements instead
   function ensureClearBtn(){
     const user = firebase.auth().currentUser;
     const email = user && user.email ? user.email.trim().toLowerCase() : '';
     const isAdminNow = email === 'johnlowel.fradejas@mwss.gov.ph';
     if(!isAdminNow) return;
-    if(!document.getElementById('chatClear')){
-      const header = chatWindow.querySelector('.card-header');
-      if(header){
-        const btn=document.createElement('button');
-        btn.type='button';
-        btn.className='btn btn-sm btn-danger ms-auto me-1';
-        btn.id='chatClear';
-        btn.title='Clear Chat';
-        btn.innerHTML='<i class="fa fa-trash"></i>';
-        header.insertBefore(btn, header.querySelector('#chatClose'));
-        clearBtn = btn;
-        attachClearHandler();
-      }
-    }else{
-      clearBtn = document.getElementById('chatClear');
-      clearBtn.classList.toggle('d-none', false);
+    
+    // Show admin clear button in messenger
+    if(messengerClear){
+      messengerClear.classList.remove('d-none');
     }
   }
   function attachClearHandler(){
-    if(!clearBtn) return;
-    clearBtn.addEventListener('click', async ()=>{
-      if(!isAdmin) return;
-      if(!confirm('Delete ALL chat messages?')) return;
-      clearBtn.disabled = true;
-      try{
-        const snap = await db.collection('messages').get();
-        const batch = db.batch();
-        snap.docs.forEach(doc=>batch.delete(doc.ref));
-        await batch.commit();
-        chatMessages.innerHTML='';
-      }catch(err){
-        alert('Failed to clear messages: '+err.message);
-        console.error('Clear chat error',err);
-      }finally{
-        clearBtn.disabled = false;
-      }
-    });
+    // Clear handler moved to Facebook Messenger implementation
+    // No longer needed here
   }
   ensureClearBtn();
-  if(!chatBtn) return; // html not loaded yet
+  if(!messengerToggle) return; // html not loaded yet
   firebase.auth().onAuthStateChanged(()=>{
     ensureClearBtn();
   });
-  if(chatClear){
-    chatClear.addEventListener('click', async ()=>{
-      if(!isAdmin) return;
-      if(!confirm('Delete ALL chat messages?')) return;
-      chatClear.disabled = true;
-      try{
-        const snap = await db.collection('messages').get();
-        const batch = db.batch();
-        snap.docs.forEach(doc=>batch.delete(doc.ref));
-        await batch.commit();
-        chatMessages.innerHTML='';
-      }catch(err){
-        alert('Failed to clear messages: '+err.message);
-        console.error('Clear chat error',err);
-      }finally{
-        chatClear.disabled = false;
-      }
-    });
-  }
-  // ----- Draggable button -----
+  // ----- Draggable messenger button -----
   try{
-    const stored = JSON.parse(localStorage.getItem('chatBtnPos')||'{}');
+    const stored = JSON.parse(localStorage.getItem('messengerBtnPos')||'{}');
     if(stored.left!=null && stored.top!=null){
-      chatBtn.style.left = stored.left + 'px';
-      chatBtn.style.top = stored.top + 'px';
-      chatBtn.style.right = 'auto';
-      chatBtn.style.bottom = 'auto';
+      messengerToggle.style.left = stored.left + 'px';
+      messengerToggle.style.top = stored.top + 'px';
+      messengerToggle.style.right = 'auto';
+      messengerToggle.style.bottom = 'auto';
     }
   }catch{}
-  chatBtn.style.position = 'fixed';
+  messengerToggle.style.position = 'fixed';
   let dragOffsetX=0, dragOffsetY=0, dragging=false;
-  chatBtn.addEventListener('mousedown',e=>{
+  messengerToggle.addEventListener('mousedown',e=>{
     // ignore right-click
     if(e.button!==0) return;
     dragging=true;
-    dragOffsetX = e.clientX - chatBtn.getBoundingClientRect().left;
-    dragOffsetY = e.clientY - chatBtn.getBoundingClientRect().top;
+    dragOffsetX = e.clientX - messengerToggle.getBoundingClientRect().left;
+    dragOffsetY = e.clientY - messengerToggle.getBoundingClientRect().top;
     document.body.style.userSelect='none';
   });
   window.addEventListener('mousemove',e=>{
@@ -492,17 +474,16 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
     const top = e.clientY - dragOffsetY;
     const newLeft = Math.max(0, Math.min(window.innerWidth-60, left));
     const newTop = Math.max(0, Math.min(window.innerHeight-60, top));
-    chatBtn.style.left = newLeft + 'px';
-    chatBtn.style.top = newTop + 'px';
-    chatBtn.style.right = 'auto';
-    chatBtn.style.bottom = 'auto';
-    if(chatWindow.style.display!=='none') positionChatWindow();
+    messengerToggle.style.left = newLeft + 'px';
+    messengerToggle.style.top = newTop + 'px';
+    messengerToggle.style.right = 'auto';
+    messengerToggle.style.bottom = 'auto';
   });
   window.addEventListener('mouseup',()=>{
     if(dragging){
       dragging=false;
       document.body.style.userSelect='';
-      localStorage.setItem('chatBtnPos', JSON.stringify({left: parseInt(chatBtn.style.left), top: parseInt(chatBtn.style.top)}));
+      localStorage.setItem('messengerBtnPos', JSON.stringify({left: parseInt(messengerToggle.style.left), top: parseInt(messengerToggle.style.top)}));
     }
   });
 
@@ -520,8 +501,7 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
     return ADMIN_UID;
   }
 
-  function showChatBtn(){ chatBtn.style.display='inline-flex'; }
-  function hideChatBtn(){ chatBtn.style.display='none'; }
+  // Old chat button functions removed - using Facebook Messenger functions instead
 
   // populate recipients when approvedUsers list loads
   function refreshRecipients(){
@@ -561,79 +541,186 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
     });
   }
 
-  // render a message bubble
+  // Render Facebook-style message bubble
   function appendMsg(m, canDelete=false){
     const self = firebase.auth().currentUser?.uid === m.fromId;
-    const div = document.createElement('div');
-    div.className = 'mb-1';
-    // format timestamp if present
-    let ts='';
+    const messageGroup = document.createElement('div');
+    messageGroup.className = 'message-group';
+    
+    // Format timestamp
+    let ts = '';
     if(m.timestamp){
       const d = m.timestamp.toDate ? m.timestamp.toDate() : (m.timestamp.seconds? new Date(m.timestamp.seconds*1000) : new Date(m.timestamp));
-      ts = d.toLocaleString(undefined,{hour:'2-digit',minute:'2-digit',hour12:false,month:'short',day:'numeric'});
+      ts = d.toLocaleString(undefined,{hour:'2-digit',minute:'2-digit',hour12:false});
     }
-    const header = `${self?'Me':m.fromEmail}${m.toId ? ' ➜ PM':''}`;
+    
+    // Show sender name for received messages in group chats
+    if(!self && currentChat === 'all'){
+      const senderDiv = document.createElement('div');
+      senderDiv.className = 'message-sender';
+      senderDiv.textContent = m.fromEmail;
+      messageGroup.appendChild(senderDiv);
+    }
+    
     const bubble = document.createElement('div');
-    bubble.className = `p-2 rounded ${self?'bg-primary text-white ms-auto':'bg-light'}`;
-    bubble.style.maxWidth='80%';
-    bubble.style.wordWrap='break-word';
+    bubble.className = `message-bubble ${self ? 'sent' : 'received'}`;
     bubble.textContent = m.text;
     bubble.dataset.id = m.id || '';
-
-    if(canDelete){
-      const delBtn = document.createElement('button');
-      delBtn.type='button';
-      delBtn.className='btn btn-sm btn-link text-danger ms-1';
-      delBtn.innerHTML='<i class="fa fa-trash"></i>';
-      delBtn.title='Delete message';
-      delBtn.onclick = async ()=>{
+    
+    if(canDelete && self){
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn btn-sm btn-link text-danger position-absolute';
+      deleteBtn.style.top = '0';
+      deleteBtn.style.right = '-25px';
+      deleteBtn.innerHTML = '<i class="fa fa-trash" style="font-size:10px;"></i>';
+      deleteBtn.title = 'Delete message';
+      deleteBtn.onclick = async () => {
         if(!confirm('Delete this message?')) return;
+        deleteBtn.disabled = true;
+        deleteBtn.innerHTML = '<i class="fa fa-spinner fa-spin" style="font-size:10px;"></i>';
+        
         try{
-          await db.collection('messages').doc(m.id).delete();
-        }catch(err){alert('Failed to delete: '+err.message);}
+          const user = firebase.auth().currentUser;
+          // Check if user owns this message
+          if(m.fromId !== user.uid) {
+            alert('You can only delete your own messages');
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = '<i class="fa fa-trash" style="font-size:10px;"></i>';
+            return;
+          }
+          
+          // Try to delete the message first
+          try {
+            await db.collection('messages').doc(m.id).delete();
+            // Remove the message element from UI immediately
+            messageGroup.remove();
+          } catch(deleteErr) {
+            // If direct deletion fails due to permissions, try soft delete
+            console.log('Direct delete failed, trying soft delete:', deleteErr);
+            await db.collection('messages').doc(m.id).update({
+              deleted: true,
+              deletedBy: user.uid,
+              deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            // Remove the message element from UI immediately
+            messageGroup.remove();
+          }
+          
+        }catch(err){
+          console.error('Delete error:', err);
+          alert('Unable to delete message. Please contact administrator.');
+          deleteBtn.disabled = false;
+          deleteBtn.innerHTML = '<i class="fa fa-trash" style="font-size:10px;"></i>';
+        }
       };
-      const flex = document.createElement('div');
-      flex.style.display='flex';
-      flex.style.alignItems='center';
-      flex.appendChild(bubble);
-      flex.appendChild(delBtn);
-      div.innerHTML = `<small class="text-muted d-block">${header} <span style="font-size:10px">${ts}</span></small>`;
-      div.appendChild(flex);
-    }else{
-      div.innerHTML = `<small class="text-muted d-block">${header} <span style="font-size:10px">${ts}</span></small>`;
-      div.appendChild(bubble);
+      bubble.style.position = 'relative';
+      bubble.appendChild(deleteBtn);
     }
-    div.style.display='flex';
-    div.style.flexDirection='column';
-    div.style.alignItems = self?'flex-end':'flex-start';
-    chatMessages.appendChild(div);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    messageGroup.appendChild(bubble);
+    
+    // Add timestamp
+    if(ts){
+      const timeDiv = document.createElement('div');
+      timeDiv.className = 'message-time';
+      timeDiv.textContent = ts;
+      messageGroup.appendChild(timeDiv);
+    }
+    
+    msgContainer.appendChild(messageGroup);
+    msgContainer.scrollTop = msgContainer.scrollHeight;
+  }
+  
+  // Update contacts list with unread counts
+  function updateContactsList(){
+    if(!approvedUsers) return;
+    
+    contactsList.innerHTML = '';
+    
+    approvedUsers.forEach(user => {
+      const contactItem = document.createElement('div');
+      contactItem.className = 'contact-item';
+      contactItem.dataset.chat = user.id;
+      
+      const unreadCount = unreadCounts[user.id] || 0;
+      
+      contactItem.innerHTML = `
+        <div class="contact-avatar">
+          <i class="fa fa-user"></i>
+        </div>
+        <div class="contact-info">
+          <div class="contact-name">${user.email}</div>
+          <div class="contact-preview">Click to start private chat</div>
+        </div>
+        ${unreadCount > 0 ? `<div class="contact-badge">${unreadCount}</div>` : ''}
+      `;
+      
+      contactItem.addEventListener('click', () => {
+        switchChat(user.id, user.email, 'fa-user');
+      });
+      
+      contactsList.appendChild(contactItem);
+    });
+    
+    // Add admin contact if not already present
+    if(![...approvedUsers].some(u => u.email.toLowerCase() === ADMIN_EMAIL_LOWER)){
+      const adminContact = document.createElement('div');
+      adminContact.className = 'contact-item';
+      adminContact.dataset.chat = ADMIN_EMAIL_LOWER;
+      
+      const adminUnread = unreadCounts[ADMIN_EMAIL_LOWER] || 0;
+      
+      adminContact.innerHTML = `
+        <div class="contact-avatar">
+          <i class="fa fa-crown"></i>
+        </div>
+        <div class="contact-info">
+          <div class="contact-name">${ADMIN_EMAIL}</div>
+          <div class="contact-preview">Administrator</div>
+        </div>
+        ${adminUnread > 0 ? `<div class="contact-badge">${adminUnread}</div>` : ''}
+      `;
+      
+      adminContact.addEventListener('click', () => {
+        switchChat(ADMIN_EMAIL_LOWER, ADMIN_EMAIL, 'fa-crown');
+      });
+      
+      contactsList.appendChild(adminContact);
+    }
   }
 
-  // --- Messaging filtering logic ---
+  // --- Facebook Messenger filtering logic ---
   let allMessages = [];
   function renderMessages(){
     const uid = firebase.auth().currentUser.uid;
-    const sel = chatRecipient.value; // 'all' for broadcast or userId / email for PM
-    chatMessages.innerHTML = '';
+    const userEmail = firebase.auth().currentUser.email?.toLowerCase();
+    msgContainer.innerHTML = '';
+    
     allMessages.forEach(m=>{
-      if(sel==='all'){
+      if(currentChat==='all'){
         if(!m.toId){ // broadcast only
           appendMsg(m, m.fromId===uid);
         }
       }else{
         // Private thread between current user and selected recipient
-        const other = sel; // could be uid or email string
+        const other = currentChat; // could be uid or email string
         if(m.toId===null) return; // skip broadcasts
+        
         const fromSelf = m.fromId===uid;
         const fromOther = m.fromId===other || (m.fromEmail && m.fromEmail.toLowerCase()===other);
-        const toOther   = m.toId===other || (typeof m.toId==='string' && m.toId.toLowerCase && m.toId.toLowerCase()===other);
+        
+        // Handle both UID and email-based targeting
+        const toOther = m.toId===other || (typeof m.toId==='string' && m.toId.toLowerCase && m.toId.toLowerCase()===other);
+        const toMe = m.toId===uid || (m.toId && m.toId.toLowerCase && m.toId.toLowerCase()===userEmail) || (isAdmin && m.toId===ADMIN_EMAIL_LOWER && other===ADMIN_EMAIL_LOWER);
+        
         const a = fromSelf && toOther; // message I sent to other
-        const b = fromOther && m.toId===uid; // message other sent to me
+        const b = fromOther && toMe; // message other sent to me
+        
         if(a || b){
           appendMsg(m, m.fromId===uid);
           // mark as read
-          unreadCounts[other]=0;
+          const readKey = m.fromEmail ? m.fromEmail.toLowerCase() : other;
+          unreadCounts[readKey]=0;
           updateBadge();
         }
       }
@@ -643,20 +730,38 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
   function startListening(){
     if(msgsUnsub) msgsUnsub();
     const uid = firebase.auth().currentUser.uid;
+    const userEmail = firebase.auth().currentUser.email?.toLowerCase();
     msgsUnsub = db.collection('messages').orderBy('timestamp','asc').onSnapshot(snap=>{
       allMessages = [];
       snap.forEach(doc=>{
         const m = doc.data();
-        if(!m.toId || m.toId===uid || m.fromId===uid || (isAdmin && m.toId===ADMIN_EMAIL_LOWER)){
+        
+        // Skip deleted messages
+        if(m.deleted) return;
+        
+        // Include message if:
+        // 1. It's a broadcast (no toId)
+        // 2. It's sent to me (by UID or email)
+        // 3. It's sent by me
+        // 4. I'm admin and it's sent to admin email
+        const sentToMe = m.toId===uid || (m.toId && m.toId.toLowerCase && m.toId.toLowerCase()===userEmail);
+        const sentByMe = m.fromId===uid;
+        const isAdminMessage = isAdmin && m.toId===ADMIN_EMAIL_LOWER;
+        
+        if(!m.toId || sentToMe || sentByMe || isAdminMessage){
           allMessages.push({id:doc.id,...m});
-          if(m.toId===uid && m.fromId!==uid){
-            unreadCounts[m.fromId] = (unreadCounts[m.fromId]||0)+1;
+          
+          // Handle unread count for messages sent to me
+          const messageToMe = (m.toId===uid || (m.toId && m.toId.toLowerCase && m.toId.toLowerCase()===userEmail) || (isAdmin && m.toId===ADMIN_EMAIL_LOWER)) && m.fromId!==uid;
+          if(messageToMe){
+            const senderId = m.fromEmail ? m.fromEmail.toLowerCase() : m.fromId;
+            unreadCounts[senderId] = (unreadCounts[senderId]||0)+1;
             updateBadge();
             notifyPm(m.fromEmail);
           }
-          if(chatWindow.style.display==='none' && m.fromId!==uid){
-            chatBtn.classList.add('animate__animated','animate__tada');
-            setTimeout(()=>chatBtn.classList.remove('animate__animated','animate__tada'),1000);
+          if(messengerSidebar.style.display==='none' && m.fromId!==uid){
+            messengerToggle.classList.add('animate__animated','animate__tada');
+            setTimeout(()=>messengerToggle.classList.remove('animate__animated','animate__tada'),1000);
           }
         }
       });
@@ -665,24 +770,22 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
     });
   }
 
-  // Re-render when recipient changes
-  chatRecipient.addEventListener('change', renderMessages);
-
-  // send message
+  // Send message function for Facebook Messenger
   async function sendMessage(){
-    const txt = chatInput.value.trim();
+    const txt = msgInput.value.trim();
     if(!txt) return;
-    const toVal = chatRecipient.value;
     const user = firebase.auth().currentUser;
+    
     // optimistic append
-    appendMsg({text:txt,fromId:user.uid,fromEmail:user.email,toId:toVal==='all'?null:toVal,timestamp:new Date()}, true);
-    chatInput.value='';
+    appendMsg({text:txt,fromId:user.uid,fromEmail:user.email,toId:currentChat==='all'?null:currentChat,timestamp:new Date()}, true);
+    msgInput.value='';
+    
     try{
       await db.collection('messages').add({
         text: txt,
         fromId: user.uid,
         fromEmail: user.email,
-        toId: toVal==='all'? null : toVal,
+        toId: currentChat==='all'? null : currentChat,
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
       });
     }catch(err){
@@ -691,36 +794,62 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
     }
   }
 
-  function positionChatWindow(){
-    const btnRect = chatBtn.getBoundingClientRect();
-    const winWidth = 300; // set in css
-    const winHeight = 400;
-    let left = btnRect.left;
-    if(left + winWidth > window.innerWidth) left = window.innerWidth - winWidth - 10;
-    let top = btnRect.top - winHeight - 10;
-    if(top < 0) top = btnRect.top + 60; // place below button if not enough space
-    chatWindow.style.left = left + 'px';
-    chatWindow.style.top = top + 'px';
-  }
-  chatBtn.onclick=()=>{positionChatWindow();chatWindow.style.display='flex';chatBtn.classList.remove('animate__animated','animate__tada');};
-  chatClose.onclick=()=>{chatWindow.style.display='none';};
-  chatSend.onclick=sendMessage;
-  chatInput.addEventListener('keyup',e=>{if(e.key==='Enter') sendMessage();});
+  // Event handlers for Facebook Messenger
+  messengerToggle.onclick = () => {
+    showMessenger();
+    messengerToggle.classList.remove('animate__animated','animate__tada');
+  };
+  
+  messengerClose.onclick = hideMessenger;
+  
+  msgSend.onclick = sendMessage;
+  
+  msgInput.addEventListener('keyup', e => {
+    if(e.key === 'Enter') sendMessage();
+  });
+  
+  // General chat contact click handler
+  document.querySelector('.contact-item[data-chat="all"]').addEventListener('click', () => {
+    switchChat('all', 'General Chat', 'fa-users');
+  });
 
   // expose for other functions
-  window.__refreshChatRecipients = refreshRecipients;
+  window.__refreshChatRecipients = updateContactsList;
 
-  // show btn when user logged in & approved
+  // Show messenger when user logged in & approved
+  function showMessengerBtn(){ messengerToggle.style.display='inline-flex'; }
+  function hideMessengerBtn(){ messengerToggle.style.display='none'; }
+
   firebase.auth().onAuthStateChanged(user=>{
     if(user && !user.isAnonymous){
-      // approved check already done earlier
-      showChatBtn();
+      showMessengerBtn();
       startListening();
     }else{
-      hideChatBtn();
+      hideMessengerBtn();
       if(msgsUnsub) msgsUnsub();
     }
   });
+  
+  // Admin clear messages functionality
+  if(messengerClear){
+    messengerClear.addEventListener('click', async ()=>{
+      if(!isAdmin) return;
+      if(!confirm('Delete ALL chat messages?')) return;
+      messengerClear.disabled = true;
+      try{
+        const snap = await db.collection('messages').get();
+        const batch = db.batch();
+        snap.docs.forEach(doc=>batch.delete(doc.ref));
+        await batch.commit();
+        msgContainer.innerHTML='';
+      }catch(err){
+        alert('Failed to clear messages: '+err.message);
+        console.error('Clear chat error',err);
+      }finally{
+        messengerClear.disabled = false;
+      }
+    });
+  }
 })();
 
   /* Page Scroll & Modal Scroll Buttons */
