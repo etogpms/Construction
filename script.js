@@ -1301,10 +1301,8 @@ function subscribeDeepwells(){
 
 // ---- Reforestation CRUD & Rendering ----
 function reforestationRowHtml(r){
-  const editAllowed = !isViewOnly && isAdmin; // viewers cannot edit
-  const deleteBtnHtml = isAdmin && !isViewOnly ? `<button class='btn btn-sm btn-danger del-ref'><i class='fa fa-trash'></i></button>` : '';
+  const deleteBtnHtml = isAdmin ? `<button class='btn btn-sm btn-danger del-ref'><i class='fa fa-trash'></i></button>` : '';
   const editBtn = `<button class='btn btn-sm btn-primary edit-ref'><i class='fa fa-pen'></i></button>`;
-  const actionCell = isViewOnly ? '' : `<td class='d-flex gap-1'>${editBtn}${deleteBtnHtml}</td>`;
   return `<tr data-id="${r.id}">
     <td>${r.activityName||''}</td>
     <td>${r.activityType||''}</td>
@@ -1312,7 +1310,7 @@ function reforestationRowHtml(r){
     <td>${r.activityStatus||''}</td>
     <td>${r.targetDate||''}</td>
     <td>${fmtNum(r.treesPlanted||0)}</td>
-    ${actionCell}
+    <td class='d-flex gap-1'>${editBtn}${deleteBtnHtml}</td>
   </tr>`;
 }
 function renderReforestations(){
@@ -1330,7 +1328,6 @@ function renderReforestations(){
   attachReforestationRowEvents();
 }
 function attachReforestationRowEvents(){
-  if(isViewOnly) return; // disable row events for viewer mode
   // Make whole row clickable (excluding action buttons) for viewing details
   document.querySelectorAll('#reforestationTable tbody tr').forEach(tr=>{
     tr.style.cursor = 'pointer';
