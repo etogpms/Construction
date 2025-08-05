@@ -21,7 +21,11 @@
 </head>
 <body>
   <!-- Logos Header -->
-  <header id="logosHeader" class="container-fluid py-3 d-flex align-items-center justify-content-center gap-4 flex-wrap sticky-top bg-white shadow-sm" style="z-index:1030;">
+  <header id="logosHeader" class="container-fluid py-3 d-flex align-items-center justify-content-between gap-2 flex-wrap sticky-top bg-white shadow-sm" style="z-index:1030;">
+    <!-- Mobile menu toggle -->
+    <button class="btn btn-outline-primary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileSidebar" aria-label="Toggle navigation">
+      <i class="fas fa-bars"></i>
+    </button>
     <img src="https://upload.wikimedia.org/wikipedia/commons/b/b3/Metropolitan_Waterworks_and_Sewerage_System_%28MWSS_%2C_NAWASA%29.svg" alt="MWSS Logo" class="logo-img" />
     <div class="text-center px-3">
       <h6 class="mb-0 fw-bold agency-title">Metropolitan Waterworks and Sewerage System</h6>
@@ -77,8 +81,8 @@
 
   <!-- Main App Wrapper -->
   <div id="appWrapper" style="display:none;">
-  <div class="d-flex">
-  <nav id="sidebar" class="navbar navbar-dark bg-primary flex-lg-column align-items-start p-3 vh-100 position-sticky top-0" style="width:260px;">
+  <div class="d-flex flex-column flex-lg-row">
+  <nav id="sidebar" class="navbar navbar-dark bg-primary flex-lg-column align-items-start p-3 vh-100 position-sticky top-0 d-none d-lg-flex" style="width:260px;">
     <div class="d-flex flex-column h-100 w-100">
       
         <ul class="navbar-nav flex-lg-column w-100">
@@ -101,6 +105,25 @@
       </div>
     </div>
   </nav>
+  <!-- Offcanvas Sidebar for Mobile -->
+  <div class="offcanvas offcanvas-start text-white bg-primary" tabindex="-1" id="mobileSidebar">
+    <div class="offcanvas-header">
+      <h5 class="offcanvas-title">Menu</h5>
+      <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body d-flex flex-column">
+      <ul class="navbar-nav flex-column mb-auto">
+        <li class="nav-item"><a class="nav-link text-white" href="#" id="mProjectsTab">Construction Projects</a></li>
+        <li class="nav-item"><a class="nav-link text-white" href="#" id="mDeepwellsTab">Deepwell Monitoring</a></li>
+        <li class="nav-item"><a class="nav-link text-white" href="#" id="mReforestationTab">Reforestation Projects</a></li>
+      </ul>
+      <div class="mt-auto d-grid gap-2">
+        <button class="btn btn-outline-info" id="mManageUsersBtn" style="display:none;">Manage Users</button>
+        <button class="btn btn-outline-light" id="mLogoutBtn" style="display:none;">Logout</button>
+        <button class="btn btn-outline-light" id="mLoginBtn" style="display:none;">Login</button>
+      </div>
+    </div>
+  </div>
   <div id="mainContent" class="flex-grow-1 overflow-auto">
 
   <!-- Users Modal -->
