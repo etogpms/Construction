@@ -11,8 +11,10 @@
   firebase.firestore.setLogLevel('debug');
   const PROJECTS_COL = 'projects';
   const DEEPWELLS_COL = 'deepwells';
+  const REFORESTATION_COL = 'reforestations';
   let unsubscribeProjects = null;
   let unsubscribeDeepwells = null;
+  let unsubscribeReforestations = null;
 
   const ADMIN_EMAIL = "johnlowel.fradejas@mwss.gov.ph"; // change to your address
   let isAdmin = false;
@@ -45,10 +47,23 @@
     deepwellsTab: document.getElementById('deepwellsTab'),
     projectsSection: document.getElementById('projectsSection'),
     deepwellsSection: document.getElementById('deepwellsSection'),
+    // Reforestation specific
+    reforestationTab: document.getElementById('reforestationTab'),
+    reforestationSection: document.getElementById('reforestationSection'),
+    reforestationTbody: document.getElementById('reforestationTbody'),
+    reforestationTypeFilter: document.getElementById('reforestationTypeFilter'),
+    reforestationStatusFilter: document.getElementById('reforestationStatusFilter'),
+    reforestationSearchInput: document.getElementById('reforestationSearchInput'),
+    addReforestationBtn: document.getElementById('addReforestationBtn'),
+    reforestationModal: new bootstrap.Modal(document.getElementById('reforestationModal')),
+    reforestationForm: document.getElementById('reforestationForm'),
     addDeepwellBtn: document.getElementById('addDeepwellBtn'),
     deepwellsTbody: document.getElementById('deepwellsTbody'),
     dwMonthsBody: document.getElementById('dwMonthsBody'),
     addDwMonthBtn: document.getElementById('addDwMonthBtn'),
+    // Reforestation details modal
+    reforestationDetailsBody: document.getElementById('reforestationDetailsBody'),
+    reforestationDetailsModal: new bootstrap.Modal(document.getElementById('reforestationDetailsModal')),
   };
 
   // convenient references
@@ -63,6 +78,7 @@
 
   let projects = [];
   let deepwells = [];
+  let reforestations = [];
   let isViewOnly = false;
   let isLevel2 = false; // accessLevel 2 users
   let elevatedAccess = false; // isAdmin || isLevel2
@@ -264,7 +280,14 @@ async function rejectUser(u){
     const userEmail=firebase.auth().currentUser?.email||'unknown';
     if(!project.history) project.history=[];
     project.history.push({email:userEmail,timestamp:new Date().toISOString(),action:formData.get("projectId")?'edit':'create'});
-    if(newAcc.date){project.accomplishments.push({...newAcc});}
+    if(newAcc.date){
+      const idx = project.accomplishments.findIndex(a=>a.date===newAcc.date);
+      if(idx>-1){
+        project.accomplishments[idx] = {...newAcc}; // overwrite existing entry for the same date
+      }else{
+        project.accomplishments.push({...newAcc});
+      }
+    }
     function postSaveUI(){elements.searchInput.value='';elements.agencyFilter.value='';elements.statusFilter.value='';elements.projectModal.hide();clearForm();
   billingContainer.innerHTML='';}
     const photoInputs=["projectPhoto1","projectPhoto2","projectPhoto3"].map(id=>document.getElementById(id));
@@ -342,10 +365,41 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
   window.editProject=(id)=>{const p=projects.find(x=>x.id===id);if(!p) return;populateForm(p);elements.projectModal.show();};
 
   window.viewProject=(id)=>{const p=projects.find(proj=>proj.id===id);if(!p) return;const photos=(p.photos&&p.photos.length)?p.photos:(p.sCurveDataUrl?[p.sCurveDataUrl]:[]);
-  const billingHtml = (p.progressBilling&&p.progressBilling.length)?`<h6 class="mt-3">Billing Details</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>Amount (PHP)</th><th>Description</th></tr></thead><tbody>${p.progressBilling.map(b=>`<tr><td>${b.date}</td><td>₱${Number(b.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td>${b.desc||''}</td></tr>`).join('')}</tbody></table></div>`:'';const photosHtml=photos.length?`<div class="d-flex gap-3 mb-3 flex-wrap">${photos.slice(0,3).map(url=>`<img src="${url}" class="img-fluid" style="max-height:300px;object-fit:contain;">`).join('')}</div>`:'';const body=document.getElementById('detailsBody');body.innerHTML=`<h5 class="fw-bold mb-2">${p.name}</h5><p><strong>Implementing Agency:</strong> ${p.implementingAgency}</p><p><strong>Contractor:</strong> ${p.contractor}</p>
-<p><strong>Location:</strong> ${p.location || ''}</p><p><strong>Contract Amount:</strong> ₱${Number(p.contractAmount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>${p.revisedContractAmount?`<p><strong>Revised Contract Amount:</strong> ₱${Number(p.revisedContractAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>`:''}<p><strong>Status:</strong> ${getProjectStatus(p)}</p><p><strong>NTP:</strong> ${p.ntpDate}</p><p><strong>Duration:</strong> ${p.originalDuration} days ${p.timeExtension?"+"+p.timeExtension:""}</p><p><strong>Target Completion:</strong> ${p.revisedCompletion||p.originalCompletion}</p>${p.remarks?`<p><strong>Remarks:</strong> ${p.remarks}</p>`:''}${p.otherDetails?`<p><strong>Details:</strong> ${p.otherDetails}</p>`:''}${p.contractDocsLink?`<p><strong>Contract Docs:</strong> ${elevatedAccess?`<a href="${p.contractDocsLink}" target="_blank">Open</a>`:`<span class="text-muted">No authority to access</span>`}</p>`:''}<h6 class="mt-3">Accomplishment History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>% Accomplishment<br>Planned</th><th>% Accomplishment<br>Previous</th><th>% Accomplishment<br>To Date</th><th>Variance %</th><th>Activities</th><th>Issue</th><th>Action Taken</th></tr></thead><tbody>${(p.accomplishments||[]).map(a=>`<tr><td>${a.date}</td><td>${(a.plannedPercent??0).toFixed(2)}%</td><td>${(a.prevPercent??0).toFixed(2)}%</td><td>${(a.percent??0).toFixed(2)}%</td><td>${a.variance>=0?'+':''}${(a.variance??0).toFixed(2)}%</td><td>${bulletizeActivities(a.activities)}</td><td>${a.issue||p.issues||''}</td><td>${a.action||''}</td></tr>`).join('')}</tbody></table></div>${billingHtml}${(p.history||[]).length?`<h6 class="mt-3">Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${p.history.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`:''}`;body.innerHTML+=photosHtml;const footer=document.getElementById('detailsFooter');footer.innerHTML=`<button class="btn btn-outline-secondary" id="printBtn"><i class="fa fa-print me-1"></i>Print</button><button class="btn btn-outline-success" id="docxBtn"><i class="fa fa-download me-1"></i>Word</button>`;document.getElementById('printBtn').onclick=()=>window.print();document.getElementById('docxBtn').onclick=()=>exportProjectDocx(p);bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal')).show();};
+  const billingHtml = (p.progressBilling&&p.progressBilling.length)?`<h6 class="mt-3">Billing Details</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>Amount (PHP)</th><th>Description</th></tr></thead><tbody>${p.progressBilling.map(b=>`<tr><td>${b.date}</td><td>₱${Number(b.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td>${b.desc||''}</td></tr>`).join('')}</tbody></table></div>`:'';const photosHtml=photos.length?`<div class="d-flex gap-3 mb-3 flex-wrap">${photos.slice(0,3).map(url=>`<img src="${url}" class="img-fluid" style="max-height:300px;object-fit:contain;">`).join('')}</div>`:'';const accompSorted = (p.accomplishments || []).slice().sort((a,b)=> new Date(b.date) - new Date(a.date));
+    // Remove near-duplicate rows (same date & key fields)
+    const seenKeys = new Set();
+    const accompDedup = accompSorted.filter(a=>{
+      const key = `${a.date}|${a.percent}|${a.prevPercent}|${a.plannedPercent}|${a.activities||''}|${a.issue||''}|${a.action||''}`;
+      if(seenKeys.has(key)) return false;
+      seenKeys.add(key);
+      return true;
+    });
+    const editHistorySorted = (p.history || []).slice().sort((a,b)=> new Date(b.timestamp) - new Date(a.timestamp));
+    const body = document.getElementById('detailsBody');body.innerHTML=`<h5 class="fw-bold mb-2">${p.name}</h5><p><strong>Implementing Agency:</strong> ${p.implementingAgency}</p><p><strong>Contractor:</strong> ${p.contractor}</p>
+<p><strong>Location:</strong> ${p.location || ''}</p><p><strong>Contract Amount:</strong> ₱${Number(p.contractAmount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>${p.revisedContractAmount?`<p><strong>Revised Contract Amount:</strong> ₱${Number(p.revisedContractAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>`:''}<p><strong>Status:</strong> ${getProjectStatus(p)}</p><p><strong>NTP:</strong> ${p.ntpDate}</p><p><strong>Duration:</strong> ${p.originalDuration} days ${p.timeExtension?"+"+p.timeExtension:""}</p><p><strong>Target Completion:</strong> ${p.revisedCompletion||p.originalCompletion}</p>${p.remarks?`<p><strong>Remarks:</strong> ${p.remarks}</p>`:''}${p.otherDetails?`<p><strong>Details:</strong> ${p.otherDetails}</p>`:''}${p.contractDocsLink?`<p><strong>Contract Docs:</strong> ${elevatedAccess?`<a href="${p.contractDocsLink}" target="_blank">Open</a>`:`<span class="text-muted">No authority to access</span>`}</p>`:''}<h6 class="mt-3">Accomplishment History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>% Accomplishment<br>Planned</th><th>% Accomplishment<br>Previous</th><th>% Accomplishment<br>To Date</th><th>Variance %</th><th>Activities</th><th>Issue</th><th>Action Taken</th></tr></thead><tbody>${accompDedup.map(a=>`<tr><td>${a.date}</td><td>${(a.plannedPercent??0).toFixed(2)}%</td><td>${(a.prevPercent??0).toFixed(2)}%</td><td>${(a.percent??0).toFixed(2)}%</td><td>${a.variance>=0?'+':''}${(a.variance??0).toFixed(2)}%</td><td>${bulletizeActivities(a.activities)}</td><td>${a.issue||p.issues||''}</td><td>${a.action||''}</td></tr>`).join('')}</tbody></table></div>${billingHtml}${editHistorySorted.length?`<h6 class="mt-3">Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${editHistorySorted.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`:''}`;body.innerHTML+=photosHtml;const footer=document.getElementById('detailsFooter');footer.innerHTML=`<button class="btn btn-outline-secondary" id="printBtn"><i class="fa fa-print me-1"></i>Print</button><button class="btn btn-outline-success" id="docxBtn"><i class="fa fa-download me-1"></i>Word</button>`;document.getElementById('printBtn').onclick=()=>window.print();document.getElementById('docxBtn').onclick=()=>exportProjectDocx(p);bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal')).show();};
 
   // simple docx export skipped for brevity ...
+
+// ----- UI Cleanup Helpers -----
+function cleanDeepwellDuplicates(){
+  const dwSec = document.getElementById('deepwellsSection');
+  if(!dwSec) return;
+  // Remove duplicate search/filter controls (keep first occurrence)
+  const searchInputs = dwSec.querySelectorAll('#dwSearchInput');
+  searchInputs.forEach((el,idx)=>{ if(idx>0) el.closest('.col-md-3, .col-md-2, .col-md-3.text-md-end')?.remove();});
+  const providerFilters = dwSec.querySelectorAll('#dwProviderFilter');
+  providerFilters.forEach((el,idx)=>{ if(idx>0) el.closest('.col-md-2')?.remove();});
+  const statusFilters = dwSec.querySelectorAll('#dwStatusFilter');
+  statusFilters.forEach((el,idx)=>{ if(idx>0) el.closest('.col-md-2')?.remove();});
+  const addBtns = dwSec.querySelectorAll('#addDeepwellBtn');
+  addBtns.forEach((btn,idx)=>{ if(idx>0) btn.closest('.col-md-3')?.remove();});
+  // Remove duplicate tables (keep first)
+  const tables = dwSec.querySelectorAll('#deepwellsTable');
+  tables.forEach((tbl,idx)=>{ if(idx>0) tbl.closest('.table-responsive')?.remove();});
+}
+
+document.addEventListener('DOMContentLoaded',cleanDeepwellDuplicates);
+
 
 /* ----------------- Facebook Messenger Feature ----------------- */
 (function(){
@@ -379,16 +433,9 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
   document.body.appendChild(toastContainer);
   
   function notifyPm(fromEmail){
+    // Toast pop-up disabled at user's request; we still update the unread badge
     if(!fromEmail) return;
     updateBadge();
-    const div = document.createElement('div');
-    div.className = 'toast align-items-center text-bg-primary border-0';
-    div.role='alert';
-    div.ariaLive='assertive';
-    div.ariaAtomic='true';
-    div.innerHTML = `<div class="d-flex"><div class="toast-body">New message from ${fromEmail}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div>`;
-    toastContainer.appendChild(div);
-    new bootstrap.Toast(div,{delay:5000}).show();
   }
   
   // Messenger UI Functions
@@ -642,7 +689,8 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
       contactItem.className = 'contact-item';
       contactItem.dataset.chat = user.id;
       
-      const unreadCount = unreadCounts[user.id] || 0;
+      const emailKey = (user.email || '').toLowerCase();
+      const unreadCount = unreadCounts[user.id] || unreadCounts[emailKey] || 0;
       
       contactItem.innerHTML = `
         <div class="contact-avatar">
@@ -754,9 +802,15 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
           // Handle unread count for messages sent to me
           const messageToMe = (m.toId===uid || (m.toId && m.toId.toLowerCase && m.toId.toLowerCase()===userEmail) || (isAdmin && m.toId===ADMIN_EMAIL_LOWER)) && m.fromId!==uid;
           if(messageToMe){
-            const senderId = m.fromEmail ? m.fromEmail.toLowerCase() : m.fromId;
-            unreadCounts[senderId] = (unreadCounts[senderId]||0)+1;
+             const senderEmailKey = (m.fromEmail||'').toLowerCase();
+             const senderUidKey   = m.fromId;
+             // increment both keys so either mapping works in contact list
+             if(senderEmailKey){
+               unreadCounts[senderEmailKey] = (unreadCounts[senderEmailKey]||0)+1;
+             }
+             unreadCounts[senderUidKey] = (unreadCounts[senderUidKey]||0)+1;
             updateBadge();
+            updateContactsList();
             notifyPm(m.fromEmail);
           }
           if(messengerSidebar.style.display==='none' && m.fromId!==uid){
@@ -824,6 +878,7 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
     if(user && !user.isAnonymous){
       showMessengerBtn();
       startListening();
+subscribeReforestations();
     }else{
       hideMessengerBtn();
       if(msgsUnsub) msgsUnsub();
@@ -896,19 +951,57 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
   // Attach listeners
   if(elements.projectForm) elements.projectForm.addEventListener('submit', onSaveProject);
   if(elements.searchInput) elements.searchInput.addEventListener('input', render);
-  if(elements.agencyFilter) elements.agencyFilter.addEventListener('change', render);
-  if(elements.statusFilter) elements.statusFilter.addEventListener('change', render);
+  // Add listeners for Construction Projects filters
+  elements.agencyFilter?.addEventListener('change', render);
+  elements.statusFilter?.addEventListener('change', render);
 // Deepwell filters
 elements.dwProviderFilter?.addEventListener('change', renderDeepwells);
 elements.dwStatusFilter?.addEventListener('change', renderDeepwells);
 elements.dwSearchInput?.addEventListener('input', renderDeepwells);
+// Reforestation filters
+elements.reforestationTypeFilter?.addEventListener('change', renderReforestations);
+elements.reforestationStatusFilter?.addEventListener('change', renderReforestations);
+elements.reforestationSearchInput?.addEventListener('input', renderReforestations);
 
-  // ---- Utility ----
-function fmtNum(val){
-  const num = Number(val);
-  return isNaN(num)? (val||'') : num.toLocaleString();
+// ---- Utility ----
+// Compress image using canvas to keep Firestore doc size small (<1MB total)
+async function compressImage(file, maxSize=1024, quality=0.7){
+return new Promise((resolve,reject)=>{
+const img = new Image();
+const reader = new FileReader();
+reader.onload = e=>{
+img.onload = ()=>{
+let {width, height} = img;
+if(width>maxSize || height>maxSize){
+const ratio = Math.min(maxSize/width, maxSize/height);
+width = Math.round(width*ratio);
+height = Math.round(height*ratio);
+}
+const canvas = document.createElement('canvas');
+canvas.width = width; canvas.height = height;
+const ctx = canvas.getContext('2d');
+ctx.drawImage(img,0,0,width,height);
+canvas.toBlob(blob=>{
+const fr = new FileReader();
+fr.onload = ()=>resolve(fr.result);
+fr.onerror = reject;
+fr.readAsDataURL(blob);
+},'image/jpeg',quality);
+};
+img.onerror = reject;
+img.src = e.target.result;
+};
+reader.onerror = reject;
+reader.readAsDataURL(file);
+});
 }
 
+function fmtNum(val){
+const num = Number(val);
+return isNaN(num)? (val||'') : num.toLocaleString();
+}
+
+// ---- Deepwell CRUD & Rendering ----
 function bulletizeActivities(text){
   if(!text) return '';
   // Split by patterns like "1." "2." etc. or semicolons/double line breaks
@@ -1132,7 +1225,8 @@ window.editDeepwell = (id,edit=true)=>{
   const historyContainer = document.getElementById('dwHistoryContainer');
   if(historyContainer){
     if((dw.history||[]).length){
-      historyContainer.innerHTML = `<h6>Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${dw.history.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`;
+      const histSorted = dw.history.slice().sort((a,b)=> new Date(b.timestamp) - new Date(a.timestamp));
+      historyContainer.innerHTML = `<h6>Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${histSorted.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`;
     }else{
       historyContainer.innerHTML = '';
     }
@@ -1156,17 +1250,42 @@ function showProjectsSection(){
   elements.deepwellsTab.classList.remove('active');
   elements.projectsSection.style.display='block';
   elements.deepwellsSection.style.display='none';
+  elements.reforestationSection.style.display='none';
 }
 function showDeepwellsSection(){
   elements.projectsTab.classList.remove('active');
   elements.deepwellsTab.classList.add('active');
   elements.projectsSection.style.display='none';
   elements.deepwellsSection.style.display='block';
+  elements.reforestationSection.style.display='none';
   renderDeepwells();
 }
 
 elements.projectsTab?.addEventListener('click',e=>{e.preventDefault();showProjectsSection();});
 elements.deepwellsTab?.addEventListener('click',e=>{e.preventDefault();showDeepwellsSection();});
+
+function showReforestationSection(){
+  elements.projectsTab.classList.remove('active');
+  elements.deepwellsTab.classList.remove('active');
+  elements.reforestationTab.classList.add('active');
+  elements.projectsSection.style.display='none';
+  elements.deepwellsSection.style.display='none';
+  elements.reforestationSection.style.display='block';
+  renderReforestations();
+}
+
+elements.reforestationTab?.addEventListener('click',e=>{e.preventDefault();showReforestationSection();});
+
+// Add Reforestation button opens modal with cleared form
+if(elements.addReforestationBtn){
+  elements.addReforestationBtn.addEventListener('click',()=>{
+    elements.reforestationForm.reset();
+    elements.reforestationForm.reforestationId.value='';
+    document.getElementById('saveReforestationBtn').style.display='inline-block';
+    elements.reforestationModal.show();
+  });
+}
+
 
 // Subscribe to deepwells data when authenticated
 function subscribeDeepwells(){
@@ -1179,6 +1298,229 @@ function subscribeDeepwells(){
 
 // integrate into auth listener: call subscribeDeepwells() when user signed in / anon / viewer
 // called after projects subscription below
+
+// ---- Reforestation CRUD & Rendering ----
+function reforestationRowHtml(r){
+  const editAllowed = !isViewOnly && isAdmin; // viewers cannot edit
+  const deleteBtnHtml = isAdmin && !isViewOnly ? `<button class='btn btn-sm btn-danger del-ref'><i class='fa fa-trash'></i></button>` : '';
+  const editBtn = `<button class='btn btn-sm btn-primary edit-ref'><i class='fa fa-pen'></i></button>`;
+  const actionCell = isViewOnly ? '' : `<td class='d-flex gap-1'>${editBtn}${deleteBtnHtml}</td>`;
+  return `<tr data-id="${r.id}">
+    <td>${r.activityName||''}</td>
+    <td>${r.activityType||''}</td>
+    <td>${r.location||''}</td>
+    <td>${r.activityStatus||''}</td>
+    <td>${r.targetDate||''}</td>
+    <td>${fmtNum(r.treesPlanted||0)}</td>
+    ${actionCell}
+  </tr>`;
+}
+function renderReforestations(){
+  if(!elements.reforestationTbody) return;
+  const text   = (elements.reforestationSearchInput?.value || '').toLowerCase();
+  const rType  = elements.reforestationTypeFilter?.value || '';
+  const rStatus= elements.reforestationStatusFilter?.value || '';
+  const filtered = reforestations.filter(r=>{
+    const matchText   = (r.activityName||'').toLowerCase().includes(text) || (r.location||'').toLowerCase().includes(text);
+    const matchType   = rType ? r.activityType === rType : true;
+    const matchStatus = rStatus ? r.activityStatus === rStatus : true;
+    return matchText && matchType && matchStatus;
+  });
+  elements.reforestationTbody.innerHTML = filtered.map(reforestationRowHtml).join('');
+  attachReforestationRowEvents();
+}
+function attachReforestationRowEvents(){
+  if(isViewOnly) return; // disable row events for viewer mode
+  // Make whole row clickable (excluding action buttons) for viewing details
+  document.querySelectorAll('#reforestationTable tbody tr').forEach(tr=>{
+    tr.style.cursor = 'pointer';
+    tr.onclick = e=>{
+      // Ignore clicks on the edit/delete buttons
+      if(e.target.closest('.edit-ref') || e.target.closest('.del-ref')) return;
+      viewReforestation(tr.dataset.id);
+    };
+  });
+  // Existing edit/delete buttons
+    document.querySelectorAll('#reforestationTable .edit-ref').forEach(btn=>{
+    btn.onclick = ()=>{
+      const id = btn.closest('tr').dataset.id;
+      editReforestation(id);
+    };
+  });
+  document.querySelectorAll('#reforestationTable .del-ref').forEach(btn=>{
+    btn.onclick = ()=>{
+      const id = btn.closest('tr').dataset.id;
+      deleteReforestation(id);
+    };
+  });
+}
+
+// Show Reforestation Activity details (view only)
+window.viewReforestation = (id)=>{
+  const r = reforestations.find(x=>x.id===id);
+  if(!r) return;
+  const body = elements.reforestationDetailsBody;
+   const histSorted = (r.history||[]).slice().sort((a,b)=> new Date(b.timestamp) - new Date(a.timestamp));
+  body.innerHTML = `
+    <h5 class="fw-bold mb-2">${r.activityName||''}</h5>
+    <p><strong>Type:</strong> ${r.activityType||''}</p>
+    <p><strong>Location:</strong> ${r.location||''}</p>
+    <p><strong>Implementing Agency:</strong> ${r.implementingAgency||''}</p>
+    <p><strong>Status:</strong> ${r.activityStatus||''}</p>
+    <p><strong>Start Date:</strong> ${r.startDate||''}</p>
+    <p><strong>Target Date:</strong> ${r.targetDate||''}</p>
+    <p><strong>Target Area (ha):</strong> ${r.targetArea||0}</p>
+    <p><strong>Trees Planted:</strong> ${fmtNum(r.treesPlanted||0)}</p>
+    <p><strong>Tree Species:</strong> ${r.treeSpecies||''}</p>
+    <p><strong>Budget (PHP):</strong> ₱${Number(r.budget||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>
+    <p><strong>Initial Survival Rate:</strong> ${r.initialSurvivalRate||0}% ${r.initialSurvivalDate?`(as of ${r.initialSurvivalDate})`:''}</p>
+    <p><strong>Final Survival Rate:</strong> ${r.finalSurvivalRate||0}% ${r.finalSurvivalDate?`(as of ${r.finalSurvivalDate})`:''}</p>
+    ${r.description?`<p><strong>Description:</strong> ${r.description}</p>`:''}
+    ${r.kmzName?`<p><strong>KMZ:</strong> <a href="${r.kmzDataUrl}" download="${r.kmzName}">${r.kmzName}</a></p>`:''}
+    ${r.remarksReforestation?`<p><strong>Remarks:</strong> ${r.remarksReforestation}</p>`:''}
+    ${r.photos&&r.photos.length?`<div class="d-flex gap-3 flex-wrap mt-3">${r.photos.map(url=>`<img src="${url}" style="max-height:250px;object-fit:contain;" class="img-fluid border">`).join('')}</div>`:''}
+    ${histSorted.length?`<h6 class="mt-4">Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${histSorted.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`:''}
+  `;
+  elements.reforestationDetailsModal.show();
+};
+
+async function saveReforestation(r){
+  let existingKmzName = '';
+  let existingKmzDataUrl = '';
+  // Fetch existing doc if editing to preserve current photos
+  let existingPhotos = [];
+  if(r.id){
+    try{
+      const docSnap = await db.collection(REFORESTATION_COL).doc(r.id).get();
+      if(docSnap.exists){
+        const docData = docSnap.data();
+        existingPhotos = docData.photos || [];
+        existingKmzName = docData.kmzName || '';
+        existingKmzDataUrl = docData.kmzDataUrl || '';
+      }
+    }catch(e){ console.error('Failed to fetch existing reforestation doc',e); }
+  }
+  
+  // Handle photo uploads (max 3)
+  const photoInputs=["reforestPhoto1","reforestPhoto2","reforestPhoto3"].map(id=>document.getElementById(id));
+  const files=photoInputs.map(inp=>inp?.files[0]).filter(f=>!!f);
+  let newPhotos = [];
+  // --- KMZ processing vars ---
+  const kmzInput = document.getElementById('kmzFile');
+  const kmzFile  = kmzInput?.files[0] || null;
+  let kmzName = existingKmzName || '';
+  let kmzDataUrl = existingKmzDataUrl || '';
+  if(files.length){
+    try{
+      newPhotos = await Promise.all(files.map(f=>compressImage(f,1024,0.75)));
+    }catch(err){alert('Error reading photos: '+err.message);}  }
+  // Final photos array – use new uploads if any, else keep existing
+  // Persist photos (replace only if new ones uploaded)
+  r.photos = newPhotos.length ? newPhotos.slice(0,3) : existingPhotos;
+  // --- KMZ upload logic ---
+  if(kmzFile){
+    if(!kmzFile.name.toLowerCase().endsWith('.kmz')){
+      alert('Only .kmz files are allowed');
+      return;
+    }
+    kmzName = kmzFile.name;
+    // Read binary as Data URL so we can store in Firestore safely (<1 MB recommended)
+    try{
+      kmzDataUrl = await new Promise((res,rej)=>{
+        const reader = new FileReader();
+        reader.onload = ()=>res(reader.result);
+        reader.onerror = rej;
+        reader.readAsDataURL(kmzFile);
+      });
+    }catch(err){ alert('Error reading KMZ file: '+err.message); return; }
+  }
+  r.kmzName = kmzName;
+  r.kmzDataUrl = kmzDataUrl;
+  // --- Edit History ---
+  const userEmail = firebase.auth().currentUser?.email || 'unknown';
+  const existingHistory = r.id ? (await db.collection(REFORESTATION_COL).doc(r.id).get()).data().history || [] : [];
+  const actionLabel = r.id ? 'edit' : 'create';
+  r.history = [...existingHistory, {email:userEmail,timestamp:new Date().toISOString(),action:actionLabel}];
+
+  const data = {...r};
+  if(!data.id) delete data.id; // Firestore cannot store undefined
+  if(r.id){
+    await db.collection(REFORESTATION_COL).doc(r.id).set(data);
+  }else{
+    await db.collection(REFORESTATION_COL).add(data);
+  }
+}
+function clearReforestationForm(){
+  const f = elements.reforestationForm;
+  f.reset();
+  if(f.reforestationId) f.reforestationId.value='';
+  ["reforestPhoto1","reforestPhoto2","reforestPhoto3"].forEach(id=>{const el=document.getElementById(id);if(el) el.value="";});
+  const kmzInp=document.getElementById('kmzFile'); if(kmzInp) kmzInp.value="";
+}
+
+function gatherReforestationForm(){
+  const f = elements.reforestationForm;
+  return {
+    id: f.reforestationId.value || undefined,
+    activityName: f.activityName.value,
+    activityType: f.activityType.value,
+    location: f.location.value,
+    implementingAgency: f.implementingAgency.value,
+    targetArea: parseFloat(f.targetArea.value) || 0,
+    treesPlanted: parseInt(f.treesPlanted.value) || 0,
+    treeSpecies: f.treeSpecies.value,
+    activityStatus: f.activityStatus.value,
+    startDate: f.startDate.value,
+    targetDate: f.targetDate.value,
+    budget: parseFloat(f.budget.value) || 0,
+    // --- new survival fields ---
+    initialSurvivalRate: parseFloat(f.initialSurvivalRate.value) || 0,
+    initialSurvivalDate: f.initialSurvivalDate.value,
+    finalSurvivalRate: parseFloat(f.finalSurvivalRate.value) || 0,
+    finalSurvivalDate: f.finalSurvivalDate.value,
+    // ---------------------------------
+    description: f.description.value,
+    remarksReforestation: f.remarksReforestation.value,
+    timestamp: Date.now()
+  };
+}
+function onSaveReforestation(e){
+  e.preventDefault();
+  const saveBtn = document.getElementById('saveReforestationBtn');
+  saveBtn.disabled = true;
+  const data = gatherReforestationForm();
+  // Close modal immediately for better UX
+  elements.reforestationModal.hide();
+  saveReforestation(data)
+    .catch(err=>{alert(err.message);})
+    .finally(()=>{saveBtn.disabled=false;});
+}
+function editReforestation(id){
+  const r = reforestations.find(r=>r.id===id);
+  if(!r) return;
+  const f = elements.reforestationForm;
+  Object.keys(r).forEach(k=>{ if(f[k]) f[k].value = r[k];});
+  // set hidden id field
+  if(f.reforestationId) f.reforestationId.value = r.id;
+  document.getElementById('saveReforestationBtn').style.display='inline-block';
+  elements.reforestationModal.show();
+}
+async function deleteReforestation(id){
+  if(!isAdmin){alert('Only admin can delete');return;}
+  if(!confirm('Delete this activity?')) return;
+  await db.collection(REFORESTATION_COL).doc(id).delete();
+}
+
+// Attach listener
+if(elements.reforestationForm){ elements.reforestationForm.addEventListener('submit',onSaveReforestation);} 
+
+function subscribeReforestations(){
+  if(unsubscribeReforestations) unsubscribeReforestations();
+  unsubscribeReforestations = db.collection(REFORESTATION_COL).onSnapshot(snap=>{
+    reforestations = snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderReforestations();
+  });
+}
 
 // ---- End project functions ----
 
@@ -1235,6 +1577,25 @@ function showLoginForm(){
 // link listeners
 if(showSignupLink) showSignupLink.addEventListener('click',e=>{e.preventDefault();showSignup();});
 if(showLoginLink)  showLoginLink.addEventListener('click',e=>{e.preventDefault();showLoginForm();});
+
+// Forgot password
+const forgotPwLink = document.getElementById('forgotPwLink');
+if(forgotPwLink){
+  forgotPwLink.addEventListener('click', async e => {
+    e.preventDefault();
+    // Try to pre-fill with whatever is typed in the email field, if available
+    const loginEmailInput = document.querySelector('#loginForm input[type="email"]');
+    const defaultEmail = loginEmailInput ? loginEmailInput.value.trim() : '';
+    const email = prompt('Enter your registered email address:', defaultEmail);
+    if(!email) return;
+    try{
+      await firebase.auth().sendPasswordResetEmail(email.trim());
+      alert('Password-reset email sent. Please check your inbox (and spam folder).');
+    }catch(err){
+      alert('Failed to send reset email: '+err.message);
+    }
+  });
+}
 
 function showApp() {
   if(isViewOnly){
