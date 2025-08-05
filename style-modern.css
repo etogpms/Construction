@@ -73,6 +73,18 @@ body{
 #appWrapper{margin-top:85px;}
 #appWrapper>.d-flex{height:calc(100vh - 85px);} /* header height */
 
+/* Mobile tweaks */
+@media (max-width: 576px){
+  #logosHeader{padding:.5rem 1rem;gap:.5rem;flex-wrap:nowrap;}
+  #logosHeader .logo-img{max-height:40px;}
+  .agency-title{font-size:.9rem;}
+  .agency-sub{font-size:.75rem;}
+  /* Stack action/filter bar controls */
+  .g-2.mb-3.align-items-end > *{flex:0 0 100%!important;max-width:100%!important;}
+  /* Tables: ensure container scrolls horizontally */
+  .table-responsive{overflow-x:auto;}
+}
+
 /* Hide scrollbar for main content while allowing scroll */
 #mainContent{-ms-overflow-style:none;scrollbar-width:none;}
 #mainContent::-webkit-scrollbar{display:none;}
