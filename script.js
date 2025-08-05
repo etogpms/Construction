@@ -280,14 +280,7 @@ async function rejectUser(u){
     const userEmail=firebase.auth().currentUser?.email||'unknown';
     if(!project.history) project.history=[];
     project.history.push({email:userEmail,timestamp:new Date().toISOString(),action:formData.get("projectId")?'edit':'create'});
-    if(newAcc.date){
-      const idx = project.accomplishments.findIndex(a=>a.date===newAcc.date);
-      if(idx>-1){
-        project.accomplishments[idx] = {...newAcc}; // overwrite existing entry for the same date
-      }else{
-        project.accomplishments.push({...newAcc});
-      }
-    }
+    if(newAcc.date){project.accomplishments.push({...newAcc});}
     function postSaveUI(){elements.searchInput.value='';elements.agencyFilter.value='';elements.statusFilter.value='';elements.projectModal.hide();clearForm();
   billingContainer.innerHTML='';}
     const photoInputs=["projectPhoto1","projectPhoto2","projectPhoto3"].map(id=>document.getElementById(id));
@@ -365,41 +358,10 @@ linkInput.disabled = !elevatedAccess;document.getElementById("ntpDate").value=pr
   window.editProject=(id)=>{const p=projects.find(x=>x.id===id);if(!p) return;populateForm(p);elements.projectModal.show();};
 
   window.viewProject=(id)=>{const p=projects.find(proj=>proj.id===id);if(!p) return;const photos=(p.photos&&p.photos.length)?p.photos:(p.sCurveDataUrl?[p.sCurveDataUrl]:[]);
-  const billingHtml = (p.progressBilling&&p.progressBilling.length)?`<h6 class="mt-3">Billing Details</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>Amount (PHP)</th><th>Description</th></tr></thead><tbody>${p.progressBilling.map(b=>`<tr><td>${b.date}</td><td>₱${Number(b.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td>${b.desc||''}</td></tr>`).join('')}</tbody></table></div>`:'';const photosHtml=photos.length?`<div class="d-flex gap-3 mb-3 flex-wrap">${photos.slice(0,3).map(url=>`<img src="${url}" class="img-fluid" style="max-height:300px;object-fit:contain;">`).join('')}</div>`:'';const accompSorted = (p.accomplishments || []).slice().sort((a,b)=> new Date(b.date) - new Date(a.date));
-    // Remove near-duplicate rows (same date & key fields)
-    const seenKeys = new Set();
-    const accompDedup = accompSorted.filter(a=>{
-      const key = `${a.date}|${a.percent}|${a.prevPercent}|${a.plannedPercent}|${a.activities||''}|${a.issue||''}|${a.action||''}`;
-      if(seenKeys.has(key)) return false;
-      seenKeys.add(key);
-      return true;
-    });
-    const editHistorySorted = (p.history || []).slice().sort((a,b)=> new Date(b.timestamp) - new Date(a.timestamp));
-    const body = document.getElementById('detailsBody');body.innerHTML=`<h5 class="fw-bold mb-2">${p.name}</h5><p><strong>Implementing Agency:</strong> ${p.implementingAgency}</p><p><strong>Contractor:</strong> ${p.contractor}</p>
-<p><strong>Location:</strong> ${p.location || ''}</p><p><strong>Contract Amount:</strong> ₱${Number(p.contractAmount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>${p.revisedContractAmount?`<p><strong>Revised Contract Amount:</strong> ₱${Number(p.revisedContractAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>`:''}<p><strong>Status:</strong> ${getProjectStatus(p)}</p><p><strong>NTP:</strong> ${p.ntpDate}</p><p><strong>Duration:</strong> ${p.originalDuration} days ${p.timeExtension?"+"+p.timeExtension:""}</p><p><strong>Target Completion:</strong> ${p.revisedCompletion||p.originalCompletion}</p>${p.remarks?`<p><strong>Remarks:</strong> ${p.remarks}</p>`:''}${p.otherDetails?`<p><strong>Details:</strong> ${p.otherDetails}</p>`:''}${p.contractDocsLink?`<p><strong>Contract Docs:</strong> ${elevatedAccess?`<a href="${p.contractDocsLink}" target="_blank">Open</a>`:`<span class="text-muted">No authority to access</span>`}</p>`:''}<h6 class="mt-3">Accomplishment History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>% Accomplishment<br>Planned</th><th>% Accomplishment<br>Previous</th><th>% Accomplishment<br>To Date</th><th>Variance %</th><th>Activities</th><th>Issue</th><th>Action Taken</th></tr></thead><tbody>${accompDedup.map(a=>`<tr><td>${a.date}</td><td>${(a.plannedPercent??0).toFixed(2)}%</td><td>${(a.prevPercent??0).toFixed(2)}%</td><td>${(a.percent??0).toFixed(2)}%</td><td>${a.variance>=0?'+':''}${(a.variance??0).toFixed(2)}%</td><td>${bulletizeActivities(a.activities)}</td><td>${a.issue||p.issues||''}</td><td>${a.action||''}</td></tr>`).join('')}</tbody></table></div>${billingHtml}${editHistorySorted.length?`<h6 class="mt-3">Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${editHistorySorted.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`:''}`;body.innerHTML+=photosHtml;const footer=document.getElementById('detailsFooter');footer.innerHTML=`<button class="btn btn-outline-secondary" id="printBtn"><i class="fa fa-print me-1"></i>Print</button><button class="btn btn-outline-success" id="docxBtn"><i class="fa fa-download me-1"></i>Word</button>`;document.getElementById('printBtn').onclick=()=>window.print();document.getElementById('docxBtn').onclick=()=>exportProjectDocx(p);bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal')).show();};
+  const billingHtml = (p.progressBilling&&p.progressBilling.length)?`<h6 class="mt-3">Billing Details</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>Amount (PHP)</th><th>Description</th></tr></thead><tbody>${p.progressBilling.map(b=>`<tr><td>${b.date}</td><td>₱${Number(b.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td>${b.desc||''}</td></tr>`).join('')}</tbody></table></div>`:'';const photosHtml=photos.length?`<div class="d-flex gap-3 mb-3 flex-wrap">${photos.slice(0,3).map(url=>`<img src="${url}" class="img-fluid" style="max-height:300px;object-fit:contain;">`).join('')}</div>`:'';const body=document.getElementById('detailsBody');body.innerHTML=`<h5 class="fw-bold mb-2">${p.name}</h5><p><strong>Implementing Agency:</strong> ${p.implementingAgency}</p><p><strong>Contractor:</strong> ${p.contractor}</p>
+<p><strong>Location:</strong> ${p.location || ''}</p><p><strong>Contract Amount:</strong> ₱${Number(p.contractAmount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>${p.revisedContractAmount?`<p><strong>Revised Contract Amount:</strong> ₱${Number(p.revisedContractAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</p>`:''}<p><strong>Status:</strong> ${getProjectStatus(p)}</p><p><strong>NTP:</strong> ${p.ntpDate}</p><p><strong>Duration:</strong> ${p.originalDuration} days ${p.timeExtension?"+"+p.timeExtension:""}</p><p><strong>Target Completion:</strong> ${p.revisedCompletion||p.originalCompletion}</p>${p.remarks?`<p><strong>Remarks:</strong> ${p.remarks}</p>`:''}${p.otherDetails?`<p><strong>Details:</strong> ${p.otherDetails}</p>`:''}${p.contractDocsLink?`<p><strong>Contract Docs:</strong> ${elevatedAccess?`<a href="${p.contractDocsLink}" target="_blank">Open</a>`:`<span class="text-muted">No authority to access</span>`}</p>`:''}<h6 class="mt-3">Accomplishment History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>% Accomplishment<br>Planned</th><th>% Accomplishment<br>Previous</th><th>% Accomplishment<br>To Date</th><th>Variance %</th><th>Activities</th><th>Issue</th><th>Action Taken</th></tr></thead><tbody>${(p.accomplishments||[]).map(a=>`<tr><td>${a.date}</td><td>${(a.plannedPercent??0).toFixed(2)}%</td><td>${(a.prevPercent??0).toFixed(2)}%</td><td>${(a.percent??0).toFixed(2)}%</td><td>${a.variance>=0?'+':''}${(a.variance??0).toFixed(2)}%</td><td>${bulletizeActivities(a.activities)}</td><td>${a.issue||p.issues||''}</td><td>${a.action||''}</td></tr>`).join('')}</tbody></table></div>${billingHtml}${(p.history||[]).length?`<h6 class="mt-3">Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${p.history.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`:''}`;body.innerHTML+=photosHtml;const footer=document.getElementById('detailsFooter');footer.innerHTML=`<button class="btn btn-outline-secondary" id="printBtn"><i class="fa fa-print me-1"></i>Print</button><button class="btn btn-outline-success" id="docxBtn"><i class="fa fa-download me-1"></i>Word</button>`;document.getElementById('printBtn').onclick=()=>window.print();document.getElementById('docxBtn').onclick=()=>exportProjectDocx(p);bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal')).show();};
 
   // simple docx export skipped for brevity ...
-
-// ----- UI Cleanup Helpers -----
-function cleanDeepwellDuplicates(){
-  const dwSec = document.getElementById('deepwellsSection');
-  if(!dwSec) return;
-  // Remove duplicate search/filter controls (keep first occurrence)
-  const searchInputs = dwSec.querySelectorAll('#dwSearchInput');
-  searchInputs.forEach((el,idx)=>{ if(idx>0) el.closest('.col-md-3, .col-md-2, .col-md-3.text-md-end')?.remove();});
-  const providerFilters = dwSec.querySelectorAll('#dwProviderFilter');
-  providerFilters.forEach((el,idx)=>{ if(idx>0) el.closest('.col-md-2')?.remove();});
-  const statusFilters = dwSec.querySelectorAll('#dwStatusFilter');
-  statusFilters.forEach((el,idx)=>{ if(idx>0) el.closest('.col-md-2')?.remove();});
-  const addBtns = dwSec.querySelectorAll('#addDeepwellBtn');
-  addBtns.forEach((btn,idx)=>{ if(idx>0) btn.closest('.col-md-3')?.remove();});
-  // Remove duplicate tables (keep first)
-  const tables = dwSec.querySelectorAll('#deepwellsTable');
-  tables.forEach((tbl,idx)=>{ if(idx>0) tbl.closest('.table-responsive')?.remove();});
-}
-
-document.addEventListener('DOMContentLoaded',cleanDeepwellDuplicates);
-
 
 /* ----------------- Facebook Messenger Feature ----------------- */
 (function(){
@@ -1225,8 +1187,7 @@ window.editDeepwell = (id,edit=true)=>{
   const historyContainer = document.getElementById('dwHistoryContainer');
   if(historyContainer){
     if((dw.history||[]).length){
-      const histSorted = dw.history.slice().sort((a,b)=> new Date(b.timestamp) - new Date(a.timestamp));
-      historyContainer.innerHTML = `<h6>Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${histSorted.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`;
+      historyContainer.innerHTML = `<h6>Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${dw.history.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`;
     }else{
       historyContainer.innerHTML = '';
     }
@@ -1357,7 +1318,6 @@ window.viewReforestation = (id)=>{
   const r = reforestations.find(x=>x.id===id);
   if(!r) return;
   const body = elements.reforestationDetailsBody;
-   const histSorted = (r.history||[]).slice().sort((a,b)=> new Date(b.timestamp) - new Date(a.timestamp));
   body.innerHTML = `
     <h5 class="fw-bold mb-2">${r.activityName||''}</h5>
     <p><strong>Type:</strong> ${r.activityType||''}</p>
@@ -1376,7 +1336,7 @@ window.viewReforestation = (id)=>{
     ${r.kmzName?`<p><strong>KMZ:</strong> <a href="${r.kmzDataUrl}" download="${r.kmzName}">${r.kmzName}</a></p>`:''}
     ${r.remarksReforestation?`<p><strong>Remarks:</strong> ${r.remarksReforestation}</p>`:''}
     ${r.photos&&r.photos.length?`<div class="d-flex gap-3 flex-wrap mt-3">${r.photos.map(url=>`<img src="${url}" style="max-height:250px;object-fit:contain;" class="img-fluid border">`).join('')}</div>`:''}
-    ${histSorted.length?`<h6 class="mt-4">Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${histSorted.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`:''}
+    ${(r.history&&r.history.length)?`<h6 class="mt-4">Edit History</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>User</th><th>Timestamp</th><th>Action</th></tr></thead><tbody>${r.history.map(h=>`<tr><td>${h.email}</td><td>${new Date(h.timestamp).toLocaleString()}</td><td>${h.action}</td></tr>`).join('')}</tbody></table></div>`:''}
   `;
   elements.reforestationDetailsModal.show();
 };
