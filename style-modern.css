@@ -1,0 +1,96 @@
+/* Modern UI tokens and overrides */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+:root{
+  --mwss-primary:#003e9f;
+  --mwss-primary-light:#0d4fb4;
+  --mwss-accent:#0095ff;
+  --mwss-bg:#f8fafc;
+  --sp:0.75rem;
+}
+
+html,body{height:100%;overflow:hidden;}
+
+body{
+  font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  background:var(--mwss-bg);
+  font-size:0.95rem;
+}
+
+/* Navbar */
+.navbar{
+  box-shadow:0 2px 4px rgba(0,0,0,.05);
+}
+.navbar .nav-link{
+  font-weight:500;
+  transition:color .2s;
+}
+.navbar .nav-link:hover{color:var(--mwss-accent);}
+
+/* Buttons */
+.btn{
+  font-weight:500;
+  border-radius:50px;
+  transition:box-shadow .15s ease-in-out,transform .15s ease-in-out;
+}
+.btn:hover{
+  box-shadow:0 4px 10px rgba(0,0,0,.1);
+  transform:translateY(-1px);
+}
+
+/* Cards & Modals */
+.card,
+.modal-content{
+  border-radius:12px;
+  box-shadow:0 2px 8px rgba(0,0,0,.05);
+}
+
+.modal.fade .modal-dialog{
+  transition:transform .3s ease-out;
+  transform:translateY(30px);
+}
+.modal.show .modal-dialog{transform:none;}
+
+/* Tables */
+.table thead th{
+  background:var(--mwss-primary);
+  color:#fff;
+  font-weight:600;
+  vertical-align:middle;
+}
+.table tbody tr:hover{
+  background:#edf2fa;
+  cursor:pointer;
+}
+
+/* Form Elements */
+.form-control:focus{
+  border-color:var(--mwss-accent);
+  box-shadow:0 0 0 .2rem rgba(0,149,255,.25);
+}
+
+#logosHeader{position:fixed;top:0;left:0;width:100%;z-index:1030;}
+#appWrapper{margin-top:85px;}
+#appWrapper>.d-flex{height:calc(100vh - 85px);} /* header height */
+
+/* Hide scrollbar for main content while allowing scroll */
+#mainContent{-ms-overflow-style:none;scrollbar-width:none;}
+#mainContent::-webkit-scrollbar{display:none;}
+
+/* Sidebar */
+#sidebar{
+  display:flex;
+  flex-direction:column;
+  background:var(--mwss-primary);
+  color:#fff;
+  min-width:240px;
+}
+
+/* Sidebar actions */
+.sidebar-actions{margin-top:auto;margin-bottom:6rem;}
+.sidebar-actions .btn{border-radius:30px;font-weight:500;width:100%;}
+
+/* Utility */
+.logo-img{max-height:64px;}
+.agency-title{font-size:1.1rem;}
+.agency-sub{font-size:.9rem;color:#555;}
